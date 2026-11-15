@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace GuardianDrone
 {
-    [BepInPlugin(Guid, "Guardian Drone", "0.1.0")]
+    [BepInPlugin(Guid, "Guardian Drone", "0.2.0")]
     [BepInDependency("net.cucorelib", BepInDependency.DependencyFlags.HardDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
@@ -21,12 +21,14 @@ namespace GuardianDrone
         public static Plugin Instance;
         public static DroneController Drone;
         public static ConfigEntry<KeyCode> DeployKey, GuardKey, HealKey;
-        public static ConfigEntry<float> Damage, ShotInterval, BleedRepair, TissueRepair, PatrolRadius;
+        public static ConfigEntry<float> Damage, ShotInterval, BleedRepair, TissueRepair, PatrolRadius, Volume;
         Harmony harmony;
         Body lastBody;
         WorldGeneration lastWorld;
-        float grantAt, controllerCheckAt;
-        bool hasController;
+        float grantAt, controllerCheckAt, missingSince, toldDeployAt, hudErrorAt;
+        bool hasController, initialGrantDone, replacementIssued, toldLeft, userToggled;
+        int inventoryControllers, worldControllers;
+        GUIStyle hudStyle;
         static FieldInfo mechField;
         static PropertyInfo pilotProperty;
 
@@ -41,10 +43,11 @@ namespace GuardianDrone
             BleedRepair = Config.Bind("Support", "BleedingRepairPerSecond", 5f, new ConfigDescription("External bleeding reduction per second on one limb.", new AcceptableValueRange<float>(0.1f, 50f)));
             TissueRepair = Config.Bind("Support", "TissueRepairPerSecond", 5f, new ConfigDescription("Skin and muscle recovery per second on one limb.", new AcceptableValueRange<float>(0.1f, 50f)));
             PatrolRadius = Config.Bind("Support", "PatrolRadius", 8f, new ConfigDescription("Cruising distance from the owner. Moves closer to treat wounds.", new AcceptableValueRange<float>(4f, 14f)));
+            Volume = Config.Bind("Support", "Volume", 0.35f, new ConfigDescription("Rotor, shot, heal and deploy volume. Zero mutes the drone.", new AcceptableValueRange<float>(0f, 1f)));
             ItemRegistry.Register(ControllerId, new CustomItemInfo
             {
                 fullName = "Guardian drone controller",
-                description = "Free, indestructible patrol drone. Use or F6: deploy/recall. F7: guard/ceasefire. F8: prioritize treatment. Patrols at a distance; projectiles can hit you or other bystanders. Moves close to repair external bleeding, skin and muscle. No battery, ammo or medicine required. Does not restore blood, organs, bones or missing limbs. Single-player prototype.",
+                description = "Free, indestructible patrol drone. Use or F6: deploy/recall. F7: guard/ceasefire. F8: prioritize treatment. Holds fire when you or a bystander is in the shot lane, then moves to a clear flank. Rounds already in flight can still hit you. Patrols about 6-9 tiles away in the open and closer beside you in a low cave. Waits instead of entering a wall when no open cell exists. Repairs external bleeding, skin and muscle. No battery, ammo or medicine. Does not restore blood, organs, bones or missing limbs. Single-player.",
                 category = "tool", weight = 0.05f, value = 0, usable = true,
                 usableWithLMB = false, destroyAtZeroCondition = false, decayMinutes = 0,
                 SpawnFrequency = 0, rec = new Recognition(0),
@@ -53,7 +56,7 @@ namespace GuardianDrone
             SaveRegistry.RegisterBodyProvider(DroneSave.Key, new DroneSave());
             harmony = new Harmony(Guid);
             harmony.PatchAll(typeof(Plugin).Assembly);
-            Log("Guardian 0.1.0 registered; free escort, external-wound repair, single player.");
+            Log("Guardian 0.2.0 registered; lane check, reachable repair, status icon, single player.");
         }
 
         public static bool Ready => PlayerCamera.main && PlayerCamera.main.body && WorldGeneration.world &&
@@ -81,24 +84,49 @@ namespace GuardianDrone
             {
                 ClearDrone(); lastBody = owner; lastWorld = WorldGeneration.world;
                 grantAt = Time.unscaledTime + 0.75f; controllerCheckAt = 0;
-            }
-            if (grantAt > 0 && Time.unscaledTime >= grantAt)
-            {
-                grantAt = 0;
-                if (!HasController(owner))
-                {
-                    var obj = Utils.Create(ControllerId, owner.transform.position, 0);
-                    if (obj && obj.TryGetComponent<Item>(out var item))
-                    {
-                        var slot = owner.FirstEmptySlot();
-                        if (slot.HasValue) owner.PickUpItem(item, slot.Value, true);
-                        else Tell("Inventory full. Your drone controller is at your feet.");
-                        Log("CONTROLLER_GRANTED body=" + owner.GetInstanceID());
-                    }
-                }
+                initialGrantDone = false; replacementIssued = false; toldLeft = false; userToggled = false; missingSince = -1;
             }
             if (Time.unscaledTime >= controllerCheckAt)
-            { hasController = HasController(owner); controllerCheckAt = Time.unscaledTime + 0.4f; }
+            {
+                CountControllers(owner);
+                hasController = inventoryControllers > 0;
+                controllerCheckAt = Time.unscaledTime + 0.4f;
+                if (hasController) toldLeft = false;
+                else if (worldControllers > 0 && !toldLeft)
+                {
+                    toldLeft = true;
+                    Tell("The controller left your inventory. Guardian recalled.");
+                }
+            }
+            if (!initialGrantDone && Time.unscaledTime >= grantAt && controllerCheckAt > 0)
+            {
+                if (inventoryControllers + worldControllers == 0)
+                {
+                    if (missingSince < 0) missingSince = Time.unscaledTime;
+                    else if (Time.unscaledTime - missingSince >= 0.8f)
+                    {
+                        GrantController(owner, "CONTROLLER_GRANTED");
+                        initialGrantDone = true;
+                        missingSince = -1;
+                    }
+                }
+                else { initialGrantDone = true; missingSince = -1; }
+            }
+            else if (initialGrantDone)
+            {
+                if (inventoryControllers + worldControllers == 0)
+                {
+                    if (missingSince < 0) missingSince = Time.unscaledTime;
+                    else if (!replacementIssued && Time.unscaledTime - missingSince >= 3f)
+                    {
+                        replacementIssued = true;
+                        GrantController(owner, "CONTROLLER_REPLACED");
+                        Tell("A free replacement controller was issued.");
+                        missingSince = -1;
+                    }
+                }
+                else missingSince = -1;
+            }
             var state = DroneSave.For(owner);
             if (!owner.alive || !hasController || state.Unsupported || !state.Deployed) ClearDrone();
             else if (!Drone)
@@ -108,6 +136,9 @@ namespace GuardianDrone
                 Drone = go.AddComponent<DroneController>();
                 Drone.Initialize(owner);
                 Log("DEPLOY body=" + owner.GetInstanceID());
+                if (!userToggled && Time.unscaledTime - toldDeployAt > 0.5f)
+                    Tell("Guardian deployed.");
+                userToggled = false;
             }
             if (InputReady())
             {
@@ -120,6 +151,87 @@ namespace GuardianDrone
         }
 
         public static bool HasController(Body owner) => owner && owner.GetComponentsInChildren<Item>(true).Any(x => x.id == ControllerId);
+        void CountControllers(Body owner)
+        {
+            inventoryControllers = 0;
+            worldControllers = 0;
+            var items = UnityEngine.Object.FindObjectsOfType<Item>();
+            for (int i = 0; i < items.Length; i++)
+            {
+                var item = items[i];
+                if (!item || item.id != ControllerId) continue;
+                if (item.GetComponentInParent<Body>() == owner) inventoryControllers++;
+                else worldControllers++;
+            }
+        }
+        static void GrantController(Body owner, string reason)
+        {
+            var obj = Utils.Create(ControllerId, owner.transform.position, 0);
+            if (!obj || !obj.TryGetComponent<Item>(out var item)) return;
+            var slot = owner.FirstEmptySlot();
+            if (slot.HasValue) owner.PickUpItem(item, slot.Value, true);
+            else Tell("Inventory full. Your drone controller is at your feet.");
+            Log(reason + " body=" + owner.GetInstanceID());
+        }
+        void OnGUI()
+        {
+            try { DrawHud(); }
+            catch (Exception e)
+            {
+                if (Time.unscaledTime < hudErrorAt) return;
+                hudErrorAt = Time.unscaledTime + 5f;
+                Log("HUD " + e.GetType().Name + ": " + e.Message);
+            }
+        }
+        void DrawHud()
+        {
+            if (!Ready) return;
+            var owner = PlayerCamera.main.body;
+            var state = DroneSave.For(owner);
+            if (state == null || state.Unsupported) return;
+            if (hudStyle == null)
+            {
+                hudStyle = new GUIStyle(GUI.skin.label) { fontSize = 16, richText = false };
+                hudStyle.normal.textColor = Color.white;
+            }
+            string posture = state.Guard ? Tr("Escort fire") : Tr("Ceasefire");
+            string activity = !hasController ? Tr("Controller missing")
+                : !state.Deployed ? Tr("Recalled")
+                : Drone && Drone.Stowed ? Tr("Waiting for space")
+                : Drone ? Tr(ActivityEnglish(Drone.Mode))
+                : Tr("Waiting");
+            var icon = DroneArt.Get("controller");
+            var box = new Rect(16, 16, 280, 52);
+            var previous = GUI.color;
+            GUI.color = new Color(0.05f, 0.07f, 0.08f, 0.78f);
+            GUI.DrawTexture(box, Texture2D.whiteTexture);
+            GUI.color = state.Guard ? new Color(0.55f, 0.95f, 0.85f) : new Color(1f, 0.72f, 0.35f);
+            if (icon && icon.texture) GUI.DrawTexture(new Rect(22, 22, 36, 36), icon.texture, ScaleMode.ScaleToFit);
+            GUI.Label(new Rect(66, 18, 220, 22), posture, hudStyle);
+            GUI.Label(new Rect(66, 40, 220, 22), activity, hudStyle);
+            GUI.color = previous;
+        }
+        static string ActivityEnglish(string mode)
+        {
+            switch (mode)
+            {
+                case "escort": return "Side escort";
+                case "offscreen": return "Off screen";
+                case "reposition": return "Moving to a clear shot";
+                case "blocked": return "Shot blocked";
+                case "no-cell": return "No open cell";
+                case "approach-medical": return "Approaching a wound";
+                case "healing": return "Repairing";
+                case "stowed": return "Waiting for space";
+                default: return "Patrolling";
+            }
+        }
+        public static string Tr(string english)
+        {
+            var strings = Locale.currentLang?.other;
+            if (strings != null && strings.TryGetValue("guardian." + english, out var value) && !string.IsNullOrEmpty(value)) return value;
+            return english;
+        }
         public static void ToggleDeployment()
         {
             if (!InputReady()) return;
@@ -135,6 +247,11 @@ namespace GuardianDrone
             if (state.Unsupported) { Tell("This drone save is from a newer version."); return; }
             state.Deployed = !state.Deployed;
             if (!state.Deployed) ClearDrone();
+            if (Instance)
+            {
+                Instance.userToggled = true;
+                Instance.toldDeployAt = Time.unscaledTime;
+            }
             Tell(state.Deployed ? "Guardian deployed." : "Guardian recalled.");
             Log("TOGGLE deployed=" + state.Deployed);
         }

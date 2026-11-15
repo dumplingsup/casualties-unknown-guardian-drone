@@ -8,7 +8,7 @@ namespace GuardianDrone
     // are solid navigation obstacles. No rigidbody means the drone cannot shove them.
     public static class DroneNavigation
     {
-        public const float Radius = 0.55f;
+        public const float Radius = 0.7f;
         static readonly int Ground = LayerMask.GetMask("Ground");
         static readonly Collider2D[] Overlaps = new Collider2D[64];
         static readonly RaycastHit2D[] Hits = new RaycastHit2D[64];

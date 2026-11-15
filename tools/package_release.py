@@ -5,7 +5,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 DLL = ROOT / "src/GuardianDrone/bin/Release/net48/GuardianDrone.dll"
 ENTRIES = {
     f"BepInEx/plugins/GuardianDrone/GuardianDrone.dll": DLL,

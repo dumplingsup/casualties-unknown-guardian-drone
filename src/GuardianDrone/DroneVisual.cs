@@ -59,7 +59,7 @@ namespace GuardianDrone
         {
             DroneArt.Materials();
             var source = owner.limbs[1].GetComponent<SpriteRenderer>();
-            sorting = source ? source.sortingOrder + 15 : 35;
+            sorting = source ? source.sortingOrder + 40 : 80;
             layer = source ? source.sortingLayerName : "Default";
             hull = new GameObject("hull").transform; hull.SetParent(transform, false);
             shell = Part("hull", "hull", hull, Vector2.zero, 0);
@@ -71,8 +71,12 @@ namespace GuardianDrone
             pulse = MakeLine("escort-pulse", new Color(1f, 0.65f, 0.2f, 1), 0.065f);
             parts = hull.GetComponentsInChildren<SpriteRenderer>();
             lamp = gameObject.AddComponent<Light2D>(); lamp.lightType = Light2D.LightType.Point;
-            lamp.color = new Color(0.75f, 0.95f, 0.88f); lamp.intensity = 0.7f;
-            lamp.pointLightOuterRadius = 4.5f; lamp.pointLightInnerRadius = 0.3f;
+            lamp.color = new Color(0.75f, 0.95f, 0.88f); lamp.intensity = 0.45f;
+            lamp.pointLightOuterRadius = 3.2f; lamp.pointLightInnerRadius = 0.2f;
+            var voice = gameObject.AddComponent<AudioSource>();
+            voice.clip = DroneAudio.Rotor; voice.loop = true; voice.spatialBlend = 1f;
+            voice.volume = 0.18f * (Plugin.Volume == null ? 0.35f : Plugin.Volume.Value);
+            voice.playOnAwake = false; voice.Play();
             lamp.pointLightOuterAngle = lamp.pointLightInnerAngle = 360; lamp.falloffIntensity = 0.5f;
         }
         SpriteRenderer Part(string name, string art, Transform parent, Vector2 pos, int order)
@@ -90,16 +94,25 @@ namespace GuardianDrone
             line.sortingLayerName = layer; line.sortingOrder = sorting + 3; line.enabled = false; return line;
         }
         public void SetHealing(bool active, Vector2 point) { Healing = active; healTarget = point; }
+        public void Aim(Vector2 aim)
+        {
+            var d = aim - (Vector2)gun.position;
+            if (d.sqrMagnitude < 0.001f) return;
+            gun.rotation = Quaternion.Euler(0, 0, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
+        }
         public void Shot(Vector2 point)
         {
-            pulseUntil = Time.time + 0.075f; pulse.enabled = true;
+            pulseUntil = Time.time + 0.22f; pulse.enabled = true;
             Vector2 muzzle=Muzzle;
-            pulse.SetPosition(0,muzzle);pulse.SetPosition(1,muzzle+(point-muzzle).normalized*0.4f);
+            pulse.startWidth = 0.16f;
+            pulse.SetPosition(0,muzzle);pulse.SetPosition(1,muzzle+(point-muzzle).normalized*1.35f);
+            DroneAudio.Shot(muzzle);
         }
         public void Animate(Vector2 velocity, string mode, Vector2 aim, float phase)
         {
             hull.localRotation = Quaternion.Euler(0, 0, Mathf.Clamp(-velocity.x * 0.8f, -12, 12));
-            eye.color = Healing ? new Color(0.3f, 1f, 0.65f) : mode == "guard" ? new Color(1f, 0.5f, 0.2f) : new Color(0.5f, 0.9f, 1f);
+            bool hot = mode == "reposition" || mode == "blocked" || mode == "guard";
+            eye.color = Healing ? new Color(0.3f, 1f, 0.65f) : hot ? new Color(1f, 0.5f, 0.2f) : new Color(0.5f, 0.9f, 1f);
             rotor.sprite = DroneArt.Get(((int)(phase * 14) & 1) == 0 ? "rotor0" : "rotor1");
             var d = aim - (Vector2)gun.position;
             gun.rotation = Quaternion.Euler(0, 0, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
@@ -107,11 +120,23 @@ namespace GuardianDrone
             if (Healing)
             {
                 beam.SetPosition(0, gun.position); beam.SetPosition(1, healTarget);
-                beam.startWidth = 0.07f + Mathf.Sin(phase * 20) * 0.02f;
+                beam.startWidth = 0.16f + Mathf.Sin(phase * 20) * 0.03f;
             }
             if (Time.time >= pulseUntil) pulse.enabled = false;
         }
-        public void Hide() { lamp.enabled = false; beam.enabled = pulse.enabled = false; Healing = false; foreach (var sr in parts) sr.enabled = false; }
-        public void Show() { lamp.enabled = true; foreach (var sr in parts) sr.enabled = true; }
+        public void Hide()
+        {
+            lamp.enabled = false; beam.enabled = pulse.enabled = false; Healing = false;
+            foreach (var sr in parts) sr.enabled = false;
+            var voice = GetComponent<AudioSource>();
+            if (voice) voice.Pause();
+        }
+        public void Show()
+        {
+            lamp.enabled = true;
+            foreach (var sr in parts) sr.enabled = true;
+            var voice = GetComponent<AudioSource>();
+            if (voice && !voice.isPlaying) voice.Play();
+        }
     }
 }

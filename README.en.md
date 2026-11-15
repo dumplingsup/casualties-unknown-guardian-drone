@@ -1,54 +1,52 @@
-# Guardian Drone 0.1.0 — prototype
+# Guardian Drone 0.2.0
 
-Casualties: Unknown, verified against Steam build **26666273**. Requires BepInEx 5
-(tested with 5.4.23.6) and CUCoreLib **1.1**. Single player only. Other builds and
-unlisted mod combinations are unverified.
+Casualties: Unknown, checked against Steam build **26666273**. Requires BepInEx 5
+(tested with 5.4.23.6) and CUCoreLib **1.1**. Single player only. Other builds,
+multiplayer, and unlisted mod combinations are unverified.
 
-**Known serious issues in 0.1.0:** the drone keeps firing when the player blocks
-its shot, can fail to reach a valid treatment position in caves, and has no
-persistent ceasefire indicator. Recovery also fails in some cases with no hover
-position. Companion reliability has not passed acceptance. See the
-[review and proposed changes](docs/PLAYABILITY-REVIEW.md) (Chinese). The changes
-are not implemented. Physical F6/F7/F8 input remains untested.
+0.1.0 kept firing through the player and could fail to reach a wound in a cave.
+That package remains available as the old test build. 0.2.0 checks the lane first
+and waits when it has no open cell. What this version actually passed is in
+[docs/V0.2.0.md](docs/V0.2.0.md).
 
 Merge the archive's `BepInEx` folder into the game directory. The mod file belongs at
 `BepInEx/plugins/GuardianDrone/GuardianDrone.dll`.
 
-Your character receives a free controller after entering a run or loading a save.
-If your inventory is full, it appears at your feet. Keep it in your carried inventory.
+Your character receives one free controller after entering a run or loading a save.
+A second one is not granted while any controller already exists. If it is truly gone,
+one replacement is issued after a few seconds. Keep it in your carried inventory.
+Dropping it recalls the drone and says why.
 
 - Use the controller or **F6**: deploy / recall.
 - **F7**: escort fire / ceasefire. Automatic medical support remains enabled.
 - **F8**: prioritize supported external wounds.
 
-The drone is indestructible and uses no batteries, ammunition or medicine. In open
-space it patrols roughly 6–9 world units from you along an overhead arc. It adjusts
-to cave clearance and attempts to redeploy if stuck, with the recovery limitation
-above. It cannot physically push the player.
+An icon at the top left shows escort or ceasefire separately from what the drone is
+doing: patrol, reposition, repair, waiting, or blocked.
 
-It targets supported native SpiderHandler creatures, CaveTicks and LaserDroneScript
-entities. Unknown modded NPCs are not automatically selected. Rounds have travel time
-and slight spread: **the player and other bystanders can be hit**. Terrain absorbs
-rounds without being destroyed.
+The drone is indestructible and uses no batteries, ammunition, or medicine. In open
+space it stays about **6–9** world units away. A low cave uses a closer side position.
+With no open cell it stows and returns only onto a free cell.
 
-At close range and with clear sight, a medical beam gradually reduces external
-bleeding and restores skin/muscle on existing organic limbs. Severe bleeding takes
-priority over shooting. It does not restore lost blood or treat internal bleeding,
-fractures, dislocations, infections, toxins, oxygen loss, brain damage, prosthetics
-or missing limbs. Embedded fragments still need removal.
+It shoots nearby supported threats. Rounds have travel time and a little spread.
+If you or a bystander is already in the lane, it holds fire and tries to move.
+**A round that has already left the gun can still hit you.** Press F7 to cease fire.
 
-Deployment intent and guard mode are stored through a CUCoreLib body save provider.
-Loading recreates one drone near the owner. The flight position and current target
-are transient. Layer transitions are supported.
+Severe bleeding, unconsciousness, or F8 keeps it on medical support until the
+bleeding has actually fallen. Light scrapes do not pull it into your face. The green
+beam appears only while a clear, in-range repair is increasing. It stops external
+bleeding and restores skin and muscle on existing organic limbs. It does not restore
+lost blood or treat internal bleeding, fractures, dislocations, infections, toxins,
+oxygen loss, brain damage, prosthetics, or missing limbs.
 
-Wayfarer Mech is optional. When piloted, the drone follows the visible mech and
-temporarily suspends treatment of the hidden pilot. Multiplayer is unverified.
+Deployment and ceasefire are saved with the character. Loading creates one drone
+near you; it does not restore the old flight position. Wayfarer Mech can be installed
+beside it. While you pilot, the drone uses the mech and pauses treatment of the
+hidden body. That combination was not in the 0.2.0 isolated run.
 
-Controls and support rates are configurable in
-`BepInEx/config/local.cu.guardiandrone.cfg`.
+`BepInEx/config/local.cu.guardiandrone.cfg` has the keys, patrol distance, damage,
+shot interval, repair rates, and volume. Zero volume mutes the drone.
 
-Back up saves before changing/removing mods. Recall the drone and remove the custom
-controller before saving for uninstallation; saves containing custom items are not
-guaranteed to load without the appropriate mod and dependencies.
-
-This archive contains no test probe, game assemblies or third-party sprite assets.
+Back up saves before removing the mod. Multiplayer, guards, turrets, and unknown
+creatures were not part of this run. The archive has no test probe, game assemblies,
+or third-party art.

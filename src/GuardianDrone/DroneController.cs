@@ -5,8 +5,10 @@ namespace GuardianDrone
 {
     public sealed class DroneController : MonoBehaviour
     {
+        public const float HealReach = 2.35f;
+        public const float OwnerClearance = 3.1f;
         public Body Owner { get; private set; }
-        public string Mode { get; private set; } = "follow";
+        public string Mode { get; private set; } = "patrol";
         public int Shots { get; private set; }
         public int Recoveries { get; private set; }
         public int FriendlyHits { get; private set; }
@@ -16,24 +18,32 @@ namespace GuardianDrone
         public string TargetId => target ? target.id : null;
         public bool Healing => visual && visual.Healing;
         public bool Piloting { get; private set; }
+        public bool LaneBlocked { get; private set; }
+        public bool StowRequested { get; private set; }
+        public bool Stowed { get; private set; }
         public bool HasTreatableWound => WorstWound(out _) != null;
+        public float BodyBleed => TotalBleed();
         DroneVisual visual;
         BuildingEntity target;
-        float scanAt, shootAt, routeAt, stuckTime, priorityUntil, phase, recoveryUntil;
+        Vector2 goal, fireGoal;
+        bool haveGoal, healLatch, healSoundPlayed;
+        float scanAt, shootAt, routeAt, stuckTime, priorityUntil, phase, calmUntil, blockedTellAt, offscreenTellAt, fireHoldUntil, healLogAt, redeployAt;
         Vector2 velocity, previousPosition, previousGoal;
         List<Vector2> route = new List<Vector2>();
         static readonly Collider2D[] Nearby = new Collider2D[256];
         static readonly RaycastHit2D[] RayHits = new RaycastHit2D[128];
         static readonly int HitMask = LayerMask.GetMask("Ground", "Body", "Limb", "Item", "Descriptor");
         readonly HashSet<int> seen = new HashSet<int>();
+        readonly List<Vector2> spots = new List<Vector2>();
 
         public void Initialize(Body owner)
         {
             Owner = owner;
             visual = gameObject.AddComponent<DroneVisual>(); visual.Build(owner);
             previousPosition = transform.position;
+            DroneAudio.Deploy(transform.position);
         }
-        public void PrioritizeHealing() { priorityUntil = Time.time + 12f; }
+        public void PrioritizeHealing() { priorityUntil = Time.time + 12f; healLatch = true; }
         public void Suspend() { if (visual) visual.Hide(); }
         public void Step(float dt)
         {
@@ -41,82 +51,244 @@ namespace GuardianDrone
             { Suspend(); return; }
             visual.Show();
             var anchor = Plugin.Anchor(Owner, out bool pilot); Piloting = pilot;
+            if (Stowed)
+            {
+                visual.Hide();
+                target = null;
+                velocity = Vector2.zero;
+                Mode = "stowed";
+                LaneBlocked = false;
+                if (Time.time >= redeployAt)
+                {
+                    redeployAt = Time.time + 0.5f;
+                    if (TryPatrol(anchor, out var spot, out _, false) && DroneNavigation.Free(spot))
+                    {
+                        transform.position = spot;
+                        previousPosition = spot;
+                        Stowed = false;
+                        StowRequested = false;
+                        stuckTime = 0;
+                        visual.Show();
+                        Plugin.Tell("Open space found.");
+                    }
+                }
+                return;
+            }
             phase += dt;
             var wound = WorstWound(out float severity);
-            bool urgent = wound && !pilot && (wound.bleedAmount >= 1f || !Owner.conscious || Time.time < priorityUntil);
-            bool canTreat = wound && !pilot;
+            float bleed = TotalBleed();
+            bool forced = Time.time < priorityUntil;
+            if ((wound && bleed >= 1f) || !Owner.conscious || forced) healLatch = true;
+            if (healLatch && Owner.conscious && !forced && bleed < 0.15f) healLatch = false;
             bool guarding = DroneSave.For(Owner).Guard;
             if (Time.time >= scanAt)
-            { scanAt = Time.time + 0.3f; target = guarding ? SelectTarget(anchor) : null; }
-            if (!guarding) target = null;
-            bool treat = canTreat && (urgent || !target);
-            Vector2 aim = treat ? (Vector2)wound.transform.position : anchor + Vector2.up * 1.4f;
-            float side = Owner.transform.localScale.x >= 0 ? -1 : 1;
-            float cruise = Plugin.PatrolRadius.Value;
-            // A broad, slow ellipse makes the drone visibly patrol rather than stick to a shoulder.
-            Vector2 patrolOffset = new Vector2(Mathf.Cos(phase * 0.24f) * cruise,
-                cruise * 0.5f + Mathf.Abs(Mathf.Sin(phase * 0.24f)) * cruise * 0.25f);
-            Vector2 preferred = treat ? aim + new Vector2(side * 2.3f, 1.1f) : anchor + patrolOffset;
-            preferred.y += Mathf.Sin(phase * 2.2f) * 0.1f;
-            Mode = treat ? "approach-medical" : target ? "guard" : pilot ? "mech-escort" : "follow";
-            bool hasHover = DroneNavigation.FindHover(aim, preferred, out var goal);
-            if (hasHover) Move(goal, anchor, dt);
-            else { velocity = Vector2.zero; stuckTime += dt; }
-            if (Time.time < recoveryUntil)
+            { scanAt = Time.time + 0.3f; target = guarding && !pilot ? SelectTarget(anchor) : null; }
+            if (!guarding || pilot || healLatch) target = null;
+            if (target) calmUntil = Time.time + 1.5f;
+            bool light = !healLatch && !pilot && wound && severity >= 18f && Time.time >= calmUntil;
+            bool treat = wound && !pilot && (healLatch || light);
+            Vector2 aim = treat ? (Vector2)wound.transform.position : anchor;
+            bool onScreen = true;
+            bool holdingFire = !treat && target && Time.time < fireHoldUntil && DroneNavigation.Free(fireGoal);
+            bool found = holdingFire || (treat ? TryHealSpot(aim, out goal) : TryPatrol(anchor, out goal, out onScreen));
+            if (holdingFire) { goal = fireGoal; onScreen = OnScreen(Camera.main, goal); }
+            haveGoal = found;
+            if (!treat && found && !onScreen) Mode = "offscreen";
+            if (haveGoal) Move(goal, dt);
+            else { velocity = Vector2.zero; stuckTime += dt; Mode = "no-cell"; }
+            if (stuckTime > 2.5f)
             {
-                Mode = "redeploy"; visual.SetHealing(false, aim); visual.Animate(Vector2.zero, Mode, aim, phase); return;
+                Stowed = true;
+                StowRequested = true;
+                stuckTime = 0;
+                Recoveries++;
+                target = null;
+                visual.Hide();
+                Mode = "stowed";
+                redeployAt = Time.time + 0.5f;
+                Plugin.Tell("Waiting for open space.");
+                return;
             }
+            if (!treat && !onScreen && Time.time >= offscreenTellAt && haveGoal)
+            { offscreenTellAt = Time.time + 8f; Plugin.Tell("Guardian is outside the camera."); }
+            Vector2 look = target ? (Vector2)target.transform.position : aim;
+            visual.Aim(look);
             bool healed = false;
-            if (treat && Vector2.Distance(transform.position, aim) <= 3f && Visible(transform.position, aim, null, Owner))
+            if (treat && Vector2.Distance(visual.Muzzle, aim) <= HealReach && Visible(visual.Muzzle, aim, null, Owner))
             {
                 float amount = Repair(wound, dt);
                 if (amount > 0)
-                { HealingSeconds += dt; RepairAmount += amount; healed = true; Mode = "healing"; }
-            }
-            visual.SetHealing(healed, aim);
-            if (!healed && !urgent && guarding && target && Time.time >= shootAt)
-            {
-                if (IsEnemy(target) && Vector2.Distance(anchor, target.transform.position) <= 28 &&
-                    CanSeeThreat(transform.position, target.transform.position, target))
                 {
-                    visual.Animate(velocity, Mode, target.transform.position, phase);
-                    DroneProjectile.Fire(this, visual.Muzzle, target.transform.position, Plugin.Damage.Value);
-                    visual.Shot(target.transform.position); Shots++; shootAt = Time.time + Plugin.ShotInterval.Value;
+                    HealingSeconds += dt; RepairAmount += amount; healed = true; Mode = "healing";
+                    if (!healSoundPlayed) { DroneAudio.Heal(visual.Muzzle); healSoundPlayed = true; }
+                    if (Time.time >= healLogAt)
+                    {
+                        healLogAt = Time.time + 0.5f;
+                        Plugin.Log("HEAL_TICK amount=" + amount.ToString("0.00") + " bleed=" + TotalBleed().ToString("0.00") + " dist=" + Vector2.Distance(visual.Muzzle, aim).ToString("0.00"));
+                    }
                 }
-                else target = null;
+                else Mode = "approach-medical";
             }
-            visual.Animate(velocity, Mode, target ? (Vector2)target.transform.position : aim, phase);
+            else if (treat)
+            {
+                Mode = "approach-medical";
+                healSoundPlayed = false;
+                if (Time.time >= healLogAt)
+                {
+                    healLogAt = Time.time + 0.5f;
+                    Plugin.Log("HEAL_APPROACH dist=" + Vector2.Distance(visual.Muzzle, aim).ToString("0.00"));
+                }
+            }
+            else healSoundPlayed = false;
+            visual.SetHealing(healed, aim);
+            LaneBlocked = false;
+            if (!healed && !healLatch && guarding && target && Time.time >= shootAt)
+                ConsiderFire(anchor, look);
+            if (!treat && Time.time < fireHoldUntil) Mode = "reposition";
+            else if (!treat && haveGoal && Mode != "blocked" && Mode != "offscreen")
+                Mode = goal.y < anchor.y + 2.6f ? "escort" : "patrol";
+            visual.Animate(velocity, Mode, look, phase);
         }
         public void RecordImpact(bool friendly) { if (friendly) FriendlyHits++; else EnemyHits++; }
-        void Move(Vector2 goal, Vector2 anchor, float dt)
+        void ConsiderFire(Vector2 anchor, Vector2 look)
         {
-            Vector2 pos = transform.position;
-            float distance = Vector2.Distance(pos, goal);
-            if (distance > 35 || stuckTime > 2.5f)
+            if (!IsEnemy(target) || !Engaging(target, Owner) || Vector2.Distance(anchor, target.transform.position) > 18f)
+            { target = null; return; }
+            if (DroneProjectile.CorridorClear(visual.Muzzle, look, Owner, target))
             {
-                // Explicit fold-and-redeploy fallback, with no attack/healing during recovery.
-                if (DroneNavigation.FindHover(anchor, goal, out var recovery))
-                { transform.position = recovery; Recoveries++; velocity = Vector2.zero; stuckTime = 0; route.Clear(); recoveryUntil = Time.time + 0.5f; shootAt = recoveryUntil; priorityUntil = 0; }
-                previousPosition = transform.position;
+                LaneBlocked = false;
+                fireHoldUntil = 0;
+                DroneProjectile.Fire(this, visual.Muzzle, look, Plugin.Damage.Value);
+                visual.Shot(look); Shots++; shootAt = Time.time + Plugin.ShotInterval.Value;
                 return;
             }
-            if (Time.time >= routeAt || Vector2.Distance(goal, previousGoal) > 2)
-            { routeAt = Time.time + 0.65f; previousGoal = goal; route = DroneNavigation.Route(pos, goal); }
-            Vector2 next = pos;
-            if (DroneNavigation.Clear(pos, goal)) next = goal;
+            LaneBlocked = true;
+            if (TryFiringSpot(anchor, look, out var spot))
+            { fireGoal = spot; fireHoldUntil = Time.time + 1.4f; goal = spot; haveGoal = true; Mode = "reposition"; }
             else
             {
-                while (route.Count > 0 && Vector2.Distance(pos, route[0]) < 0.3f) route.RemoveAt(0);
-                if (route.Count > 0) next = route[0];
+                Mode = "blocked";
+                if (Time.time >= blockedTellAt)
+                { blockedTellAt = Time.time + 4f; Plugin.Tell("Shot blocked."); }
             }
-            Vector2 desired = Vector2.ClampMagnitude((next - pos) * 5f, Mathf.Min(22f, 7f + distance));
-            velocity = Vector2.MoveTowards(velocity, desired, 60f * dt);
+        }
+        void Move(Vector2 nextGoal, float dt)
+        {
+            Vector2 pos = transform.position;
+            float distance = Vector2.Distance(pos, nextGoal);
+            if (Time.time >= routeAt || Vector2.Distance(nextGoal, previousGoal) > 1.5f)
+            { routeAt = Time.time + 0.65f; previousGoal = nextGoal; route = DroneNavigation.Route(pos, nextGoal); }
+            Vector2 next = pos;
+            if (DroneNavigation.Clear(pos, nextGoal)) next = nextGoal;
+            else
+            {
+                while (route.Count > 0 && Vector2.Distance(pos, route[0]) < 0.35f) route.RemoveAt(0);
+                if (route.Count > 0) next = route[0];
+                else { stuckTime += dt; velocity = Vector2.zero; previousPosition = pos; return; }
+            }
+            Vector2 desired = Vector2.ClampMagnitude((next - pos) * 5f, Mathf.Min(18f, 6f + distance));
+            velocity = Vector2.MoveTowards(velocity, desired, 50f * dt);
             var step = pos + velocity * dt;
             if (DroneNavigation.Clear(pos, step)) transform.position = step;
             else velocity = Vector2.zero;
-            if (distance > 2 && Vector2.Distance(previousPosition, transform.position) < dt * 0.3f) stuckTime += dt;
+            if (distance > 1.2f && Vector2.Distance(previousPosition, transform.position) < dt * 0.25f) stuckTime += dt;
             else stuckTime = 0;
             previousPosition = transform.position;
+        }
+        bool TryPatrol(Vector2 anchor, out Vector2 result, out bool onScreen, bool requirePath = true)
+        {
+            spots.Clear();
+            float cruise = Plugin.PatrolRadius.Value;
+            for (int i = 0; i < 7; i++)
+            {
+                float angle = (28f + i * 21f) * Mathf.Deg2Rad;
+                var dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                spots.Add(anchor + dir * cruise);
+                spots.Add(anchor + dir * (cruise * 0.72f));
+            }
+            spots.Add(anchor + new Vector2(-5.2f, 1.5f));
+            spots.Add(anchor + new Vector2(5.2f, 1.5f));
+            spots.Add(anchor + new Vector2(-4.2f, 2.4f));
+            spots.Add(anchor + new Vector2(4.2f, 2.4f));
+            return Pick(anchor, spots, OwnerClearance, false, requirePath, out result, out onScreen);
+        }
+        bool TryHealSpot(Vector2 wound, out Vector2 result)
+        {
+            spots.Clear();
+            for (int ring = 0; ring < 2; ring++)
+            {
+                float radius = ring == 0 ? 1.55f : 2.05f;
+                for (int i = 0; i < 10; i++)
+                {
+                    float angle = i * Mathf.PI / 5f;
+                    var spot = wound + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+                    if (Visible(spot, wound, null, Owner)) spots.Add(spot);
+                }
+            }
+            return Pick((Vector2)Owner.transform.position, spots, 1.25f, true, true, out result, out _);
+        }
+        bool TryFiringSpot(Vector2 anchor, Vector2 targetPoint, out Vector2 result)
+        {
+            spots.Clear();
+            var toTarget = targetPoint - anchor;
+            if (toTarget.sqrMagnitude < 0.01f) toTarget = Vector2.right;
+            toTarget.Normalize();
+            var flank = new Vector2(-toTarget.y, toTarget.x);
+            for (int i = 0; i < 8; i++)
+            {
+                float angle = i * Mathf.PI / 4f;
+                var dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                spots.Add(targetPoint - dir * 6.5f);
+                spots.Add(anchor + flank * (4.5f + (i % 2)) + Vector2.up * 2.2f);
+            }
+            spots.Add(targetPoint + flank * 5f);
+            spots.Add(targetPoint - flank * 5f);
+            spots.Add(targetPoint + Vector2.up * 5f);
+            float best = float.MaxValue; result = anchor; bool found = false;
+            foreach (var spot in spots)
+            {
+                if (Vector2.Distance(spot, anchor) < OwnerClearance || !DroneNavigation.Free(spot)) continue;
+                if (!DroneNavigation.Clear(transform.position, spot) && DroneNavigation.Route(transform.position, spot).Count == 0) continue;
+                if (!DroneProjectile.CorridorClear(spot, targetPoint, Owner, target)) continue;
+                float score = Vector2.Distance(transform.position, spot);
+                if (score < best) { best = score; result = spot; found = true; }
+            }
+            return found;
+        }
+        bool Pick(Vector2 anchor, List<Vector2> options, float clearance, bool medical, bool requirePath, out Vector2 result, out bool onScreen)
+        {
+            float cruise = Plugin.PatrolRadius.Value;
+            float best = float.MaxValue; result = anchor; onScreen = false; bool found = false;
+            var camera = Camera.main;
+            foreach (var spot in options)
+            {
+                if (Vector2.Distance(spot, anchor) < clearance) continue;
+                if (!DroneNavigation.Free(spot)) continue;
+                if (requirePath && !DroneNavigation.Clear(transform.position, spot) && DroneNavigation.Route(transform.position, spot).Count == 0) continue;
+                bool visible = OnScreen(camera, spot);
+                float score = medical
+                    ? Vector2.Distance(transform.position, spot)
+                    : Vector2.Distance(transform.position, spot) * 0.08f + Mathf.Abs(Vector2.Distance(spot, anchor) - cruise) * 0.35f - Mathf.Max(0f, spot.y - anchor.y) * 0.2f;
+                if (!visible) score += medical ? 6f : 40f;
+                if (score < best) { best = score; result = spot; onScreen = visible; found = true; }
+            }
+            return found;
+        }
+        static bool OnScreen(Camera camera, Vector2 point)
+        {
+            if (!camera || !camera.orthographic) return true;
+            var delta = point - (Vector2)camera.transform.position;
+            float halfH = Mathf.Max(1f, camera.orthographicSize - 1.3f);
+            float halfW = Mathf.Max(1f, halfH * camera.aspect - 0.4f);
+            return Mathf.Abs(delta.x) <= halfW && Mathf.Abs(delta.y) <= halfH;
+        }
+        float TotalBleed()
+        {
+            float sum = 0;
+            if (!Owner) return 0;
+            foreach (var limb in Owner.limbs)
+                if (limb && !limb.dismembered && !limb.prostheticInfo.hasProsthetic) sum += Mathf.Max(0, limb.bleedAmount);
+            return sum;
         }
         Limb WorstWound(out float severity)
         {
@@ -129,13 +301,12 @@ namespace GuardianDrone
                 if (!limb.hasShrapnel) score += Mathf.Max(0, 100 - limb.skinHealth) + Mathf.Max(0, 100 - limb.muscleHealth);
                 if (score > severity + 0.05f) { result = limb; severity = score; }
             }
-            return result;
+            return severity >= 18f || (result && result.bleedAmount >= 0.2f) ? result : null;
         }
         static float Repair(Limb limb, float dt)
         {
             float before = limb.bleedAmount, skin = limb.skinHealth, muscle = limb.muscleHealth;
             limb.bleedAmount = Mathf.MoveTowards(Mathf.Max(0, before), 0, Plugin.BleedRepair.Value * dt);
-            // Embedded fragments continue to require removal; do not heal past their cause.
             if (limb.bleedAmount < 0.1f && !limb.hasShrapnel)
             {
                 limb.skinHealth = Mathf.MoveTowards(limb.skinHealth, 100, Plugin.TissueRepair.Value * dt);
@@ -145,35 +316,48 @@ namespace GuardianDrone
         }
         public static bool IsEnemy(BuildingEntity b)
         {
-            if (!b || b.cantHit || b.indestructible || b.health <= 0) return false;
-            // Explicit native threat components; neutral NPCs, traders, props and unknown mod entities are excluded.
-            return b.GetComponent<SpiderHandler>() || b.GetComponent<CaveTicks>() || b.GetComponent<LaserDroneScript>();
+            if (!b || b.cantHit || b.indestructible || b.health <= 0 || !Listed(b)) return false;
+            return true;
+        }
+        static bool Listed(BuildingEntity b) => b.GetComponent<SpiderHandler>() || b.GetComponent<CaveTicks>() ||
+            b.GetComponent<LaserDroneScript>() || b.GetComponent<GuardScript>() || b.GetComponent<TurretScript>() ||
+            b.GetComponent<CeilingTurret>();
+        public static bool Engaging(BuildingEntity b, Body owner)
+        {
+            if (!owner || !IsEnemy(b)) return false;
+            float distance = Vector2.Distance(owner.transform.position, b.transform.position);
+            if (b.GetComponent<SpiderHandler>() || b.GetComponent<CaveTicks>()) return distance <= 10f;
+            if (b.GetComponent<LaserDroneScript>()) return distance <= 14f;
+            if (b.GetComponent<GuardScript>()) return distance <= 9f;
+            if (b.GetComponent<TurretScript>() || b.GetComponent<CeilingTurret>())
+                return distance <= 18f && CanSeeThreat(b.transform.position, owner.transform.position, null);
+            return false;
         }
         BuildingEntity SelectTarget(Vector2 anchor)
         {
-            seen.Clear(); BuildingEntity best = null; float bestDistance = 28f;
-            int count = Physics2D.OverlapCircleNonAlloc(anchor, 28f, Nearby, LayerMask.GetMask("Ground", "Body", "Limb"));
+            seen.Clear(); BuildingEntity best = null; float bestDistance = 18f;
+            int count = Physics2D.OverlapCircleNonAlloc(anchor, 18f, Nearby, LayerMask.GetMask("Ground", "Body", "Limb"));
             for (int i = 0; i < count; i++)
             {
                 var b = Nearby[i] ? Nearby[i].GetComponentInParent<BuildingEntity>() : null;
-                if (!b || !seen.Add(b.GetInstanceID()) || !IsEnemy(b)) continue;
+                if (!b || !seen.Add(b.GetInstanceID()) || !Engaging(b, Owner)) continue;
                 float dist = Vector2.Distance(anchor, b.transform.position);
                 if (dist < bestDistance && (CanSeeThreat(transform.position, b.transform.position, b) ||
-                    CanSeeThreat(anchor + Vector2.up * 1.4f, b.transform.position, b)))
+                    CanSeeThreat(anchor, b.transform.position, b)))
                 { best = b; bestDistance = dist; }
             }
             return best;
         }
         public static bool CanSeeThreat(Vector2 from, Vector2 to, BuildingEntity target)
         {
-            var d = to-from;
-            int count = Physics2D.RaycastNonAlloc(from,d.normalized,RayHits,d.magnitude,LayerMask.GetMask("Ground"));
+            var d = to - from; if (d.sqrMagnitude < 0.001f) return true;
+            int count = Physics2D.RaycastNonAlloc(from, d.normalized, RayHits, d.magnitude, LayerMask.GetMask("Ground"));
             if (count == RayHits.Length) return false;
-            for (int i=0; i<count; i++)
+            for (int i = 0; i < count; i++)
             {
-                var c=RayHits[i].collider; if (!c || c.isTrigger) continue;
-                var entity=c.GetComponentInParent<BuildingEntity>();
-                if (entity && (entity==target || entity.animal)) continue;
+                var c = RayHits[i].collider; if (!c || c.isTrigger) continue;
+                var entity = c.GetComponentInParent<BuildingEntity>();
+                if (entity && (entity == target || entity.animal)) continue;
                 return false;
             }
             return true;
@@ -191,7 +375,6 @@ namespace GuardianDrone
                 var body = limb ? limb.body : c.GetComponentInParent<Body>();
                 if (allowedBuilding && building == allowedBuilding) continue;
                 if (allowedBody && body == allowedBody) continue;
-                // Every other physical object blocks the ray, including player and friendly bodies.
                 return false;
             }
             return true;

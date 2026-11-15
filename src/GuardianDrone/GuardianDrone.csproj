@@ -4,7 +4,7 @@
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <AssemblyName>GuardianDrone</AssemblyName>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <!-- This project only writes build output. It never copies into the game. -->
   </PropertyGroup>
@@ -22,6 +22,9 @@
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.Physics2DModule"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.Physics2DModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AudioModule"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.RenderPipelines.Universal.Runtime"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/Unity.RenderPipelines.Universal.Runtime.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>

@@ -1,7 +1,7 @@
 {
   "item": {
     "guardian_drone_controller": "守护无人机控制器",
-    "guardian_drone_controllerdsc": "免费的无敌巡航无人机。使用或 F6 部署／收回；F7 护航／停火；F8 优先治疗。在主角外围巡航，自动射击已知敌对生物；弹丸可能误伤主角和旁人，请避开弹道。靠近照射以止住外伤出血、修复皮肤和肌肉。不消耗电池、弹药或药品。不补血、不治疗骨折、内伤、感染或断肢。换层和存档保留部署意愿。仅支持单人。"
+    "guardian_drone_controllerdsc": "免费的无敌巡航无人机。使用或 F6 部署／收回；F7 护航／停火；F8 优先治疗。主角或旁人已在弹道上时会停火并换到侧翼；已经飞出的弹丸仍可能命中。开阔处在约 6–9 格外巡航，低矮洞穴改为较近的侧向伴随。没有开阔落点时收起等待，不钻进墙里。靠近照射以止住外伤出血、修复皮肤和肌肉。不消耗电池、弹药或药品。不补血、不治疗骨折、内伤、感染或断肢。换层和存档保留部署意愿。仅支持单人。"
   },
   "other": {
     "guardian.Inventory full. Your drone controller is at your feet.": "背包已满，无人机控制器已放在脚边。",
@@ -13,6 +13,26 @@
     "guardian.Guardian: ceasefire. Medical support remains active.": "守护无人机：停止开火，继续提供医疗支援。",
     "guardian.Deploy your guardian first.": "请先部署守护无人机。",
     "guardian.No treatable external wounds. Blood loss and internal conditions need other treatment.": "没有可处理的外伤。失血、内伤等仍需其他治疗。",
-    "guardian.Guardian: medical support requested.": "守护无人机：优先处理外伤。"
+    "guardian.Guardian: medical support requested.": "守护无人机：优先处理外伤。",
+    "guardian.Shot blocked.": "射线受阻。",
+    "guardian.Guardian is outside the camera.": "守护无人机在画面外。",
+    "guardian.Waiting for open space.": "落点不够，无人机先收起。",
+    "guardian.Open space found.": "无人机回到开阔处。",
+    "guardian.The controller left your inventory. Guardian recalled.": "控制器离开了背包，守护无人机已收回。",
+    "guardian.A free replacement controller was issued.": "已补发一只免费控制器，没有重复发放。",
+    "guardian.Escort fire": "护航",
+    "guardian.Ceasefire": "停火",
+    "guardian.Controller missing": "控制器不在身上",
+    "guardian.Recalled": "已收回",
+    "guardian.Waiting for space": "等待开阔",
+    "guardian.Side escort": "侧向伴随",
+    "guardian.Off screen": "画面外",
+    "guardian.Moving to a clear shot": "换到清晰射界",
+    "guardian.Shot blocked": "射线受阻",
+    "guardian.No open cell": "没有落点",
+    "guardian.Approaching a wound": "接近伤口",
+    "guardian.Repairing": "治疗中",
+    "guardian.Patrolling": "巡航",
+    "guardian.Waiting": "等待部署"
   }
 }
