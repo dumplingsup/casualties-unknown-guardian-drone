@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Your own game install and CUCoreLib 1.1. Do not commit local.props. -->
+    <GameDir>C:\Path\To\Casualties Unknown</GameDir>
+    <CoreLibPath>C:\Path\To\CUCoreLib.dll</CoreLibPath>
+  </PropertyGroup>
+</Project>

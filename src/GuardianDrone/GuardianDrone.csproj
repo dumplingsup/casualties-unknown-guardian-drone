@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="$(MSBuildThisFileDirectory)..\..\local.props" Condition="Exists('$(MSBuildThisFileDirectory)..\..\local.props')" />
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>GuardianDrone</AssemblyName>
+    <Version>0.1.0</Version>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- This project only writes build output. It never copies into the game. -->
+  </PropertyGroup>
+  <Target Name="RequireLocalGameReferences" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(GameDir)' == '' OR '$(CoreLibPath)' == ''" Text="Copy local.props.example to local.props and set GameDir plus CoreLibPath. Those files stay on your machine; this build does not deploy the mod." />
+  </Target>
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" />
+    <PackageReference Include="Lib.Harmony" Version="2.4.2" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="Assembly-CSharp"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="CUCoreLib"><HintPath>$(CoreLibPath)</HintPath><Private>false</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/Newtonsoft.Json.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.Physics2DModule"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.Physics2DModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.RenderPipelines.Universal.Runtime"><HintPath>$(GameDir)/CasualtiesUnknown_Data/Managed/Unity.RenderPipelines.Universal.Runtime.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <ItemGroup><EmbeddedResource Include="Assets/*.png" /><EmbeddedResource Include="Locales/*.json" /></ItemGroup>
+</Project>

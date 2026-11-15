@@ -1,0 +1,15 @@
+bin/
+obj/
+.vs/
+local.props
+artifacts/
+*.user
+*.dll
+*.exe
+*.pdb
+*.zip
+*.sv
+*.log
+*.pak
+.env
+.env.*

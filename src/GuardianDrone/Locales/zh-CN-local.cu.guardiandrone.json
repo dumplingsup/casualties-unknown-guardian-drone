@@ -1,0 +1,18 @@
+{
+  "item": {
+    "guardian_drone_controller": "守护无人机控制器",
+    "guardian_drone_controllerdsc": "免费的无敌巡航无人机。使用或 F6 部署／收回；F7 护航／停火；F8 优先治疗。在主角外围巡航，自动射击已知敌对生物；弹丸可能误伤主角和旁人，请避开弹道。靠近照射以止住外伤出血、修复皮肤和肌肉。不消耗电池、弹药或药品。不补血、不治疗骨折、内伤、感染或断肢。换层和存档保留部署意愿。仅支持单人。"
+  },
+  "other": {
+    "guardian.Inventory full. Your drone controller is at your feet.": "背包已满，无人机控制器已放在脚边。",
+    "guardian.Keep the drone controller in your inventory.": "请将无人机控制器放在背包中。",
+    "guardian.This drone save is from a newer version.": "此无人机存档来自较新的版本，已保留原数据。",
+    "guardian.Guardian deployed.": "守护无人机已部署。",
+    "guardian.Guardian recalled.": "守护无人机已收回。",
+    "guardian.Guardian: escort fire enabled.": "守护无人机：自动护航开火。",
+    "guardian.Guardian: ceasefire. Medical support remains active.": "守护无人机：停止开火，继续提供医疗支援。",
+    "guardian.Deploy your guardian first.": "请先部署守护无人机。",
+    "guardian.No treatable external wounds. Blood loss and internal conditions need other treatment.": "没有可处理的外伤。失血、内伤等仍需其他治疗。",
+    "guardian.Guardian: medical support requested.": "守护无人机：优先处理外伤。"
+  }
+}
