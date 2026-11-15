@@ -4,6 +4,13 @@ Casualties: Unknown, verified against Steam build **26666273**. Requires BepInEx
 (tested with 5.4.23.6) and CUCoreLib **1.1**. Single player only. Other builds and
 unlisted mod combinations are unverified.
 
+**Known serious issues in 0.1.0:** the drone keeps firing when the player blocks
+its shot, can fail to reach a valid treatment position in caves, and has no
+persistent ceasefire indicator. Recovery also fails in some cases with no hover
+position. Companion reliability has not passed acceptance. See the
+[review and proposed changes](docs/PLAYABILITY-REVIEW.md) (Chinese). The changes
+are not implemented. Physical F6/F7/F8 input remains untested.
+
 Merge the archive's `BepInEx` folder into the game directory. The mod file belongs at
 `BepInEx/plugins/GuardianDrone/GuardianDrone.dll`.
 
@@ -16,7 +23,8 @@ If your inventory is full, it appears at your feet. Keep it in your carried inve
 
 The drone is indestructible and uses no batteries, ammunition or medicine. In open
 space it patrols roughly 6–9 world units from you along an overhead arc. It adjusts
-to cave clearance and redeploys if stuck. It cannot physically push the player.
+to cave clearance and attempts to redeploy if stuck, with the recovery limitation
+above. It cannot physically push the player.
 
 It targets supported native SpiderHandler creatures, CaveTicks and LaserDroneScript
 entities. Unknown modded NPCs are not automatically selected. Rounds have travel time

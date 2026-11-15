@@ -2,6 +2,8 @@
 
 Casualties: Unknown 的独立同伴模组，0.1.0 测试版。免费、无敌的四旋翼在主角大约 6–9 格外巡航，自动射击，弹丸有飞行时间，可能误伤主角；治疗时靠近，止住外伤出血并修复皮肤和肌肉。
 
+**已知严重问题：0.1.0 会在主角挡住弹道时持续开火，洞穴内可能无法到达有效治疗位置。当前可靠同伴体验未通过，不建议在重要存档中依赖它。** [可玩性复核与修改方案](docs/PLAYABILITY-REVIEW.md) 已记录；方案尚未实现，历史 Release 保留为测试版本。
+
 ![四旋翼外形](pixel-art/guardian-drone/preview.png)
 
 A free quadcopter companion for Casualties: Unknown. It patrols several tiles away, fires projectiles that can hit the player, and moves in to treat external wounds.
