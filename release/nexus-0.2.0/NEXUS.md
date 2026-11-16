@@ -80,7 +80,7 @@ Close the game and back up saves before changing versions. For an upgrade, repla
 
 [Source repository](https://github.com/dumplingsup/casualties-unknown-guardian-drone) · [0.2.0 source revision](https://github.com/dumplingsup/casualties-unknown-guardian-drone/tree/795c9b7094b18355494dbb7402db550d474cbe5c) · [Test record](https://github.com/dumplingsup/casualties-unknown-guardian-drone/blob/main/docs/V0.2.0.md).
 
-OpenAI Codex produced the mod code, pixel placement script, procedural audio code and documentation under the author's direction. The original drone sprites are rendered from that editable script; no third-party drone sprite is distributed. Page screenshots are actual game captures, and any staged test-arena image is labelled as such. No synthetic voice is included.
+OpenAI Codex produced the mod code, pixel placement script, procedural audio code and documentation under the author's direction. The original drone sprites are rendered from that editable script; no third-party drone sprite is distributed. The English cover and gallery use actual game captures with cropping, integer nearest-neighbour enlargement and typography composed in Pillow. No image-generation model, inpainting or synthetic voice was used for those images. The staged test arena and prepared wound are labelled in the captions.
 
 Visual study references: [CraftPix / Free Game Assets](https://free-game-assets.itch.io/free-drones-pack-pixel-art), [Elthen](https://elthen.itch.io/2d-pixel-art-robotic-drone-sprites), [Papoy Core](https://papoycore.itch.io/free-drone). Those reference images are not included. Casualties: Unknown, Unity, BepInEx, Harmony and CUCoreLib remain the work of their respective authors.
 
@@ -90,8 +90,10 @@ Initial Nexus beta, based on Guardian Drone 0.2.0. Adds pre-fire lane checks and
 
 ## Screenshot captions
 
-- `01-patrol.png`: Guardian Drone 0.2.0 patrolling in a staged in-game test arena; normal game lighting. The arena was cleared by a test fixture.
-- `02-treatment.png`: Guardian Drone treating an externally injured limb in an isolated test run. The wound was prepared by a test fixture; the beam and treatment are the running mod.
+- Main cover, `images/cover-screenshots-en.png`: English typography with a detail from a real Guardian Drone 0.2.0 game capture. Staged test arena, original game lighting, cropped and enlarged. No image-generation model used.
+- Gallery, `images/01-patrol-en.png`: Guardian Drone 0.2.0 patrolling in a staged in-game test arena. Screenshot detail, original game lighting, cropped and enlarged.
+- Gallery, `images/02-treatment-en.png`: External-wound treatment in an isolated test run. The wound was prepared by a test fixture; the beam and treatment are the running mod. Screenshot detail, cropped and enlarged.
+- Unedited capture sources remain `images/01-patrol.png` and `images/02-treatment.png`; their hashes and crop provenance are in `images/media-provenance.json`.
 
 ## Policy references checked on 2026-11-16
 
