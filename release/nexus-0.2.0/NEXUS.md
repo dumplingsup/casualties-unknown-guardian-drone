@@ -1,6 +1,6 @@
-# Guardian Drone 0.2.0 — Nexus page draft
+# Guardian Drone 0.2.0 — Nexus page material
 
-Prepared 2026-11-16. This is upload material, not a published Nexus page.
+Published 2026-11-16: [Nexus #985](https://www.nexusmods.com/scavprototype/mods/985). Actual submission and file verification: [PUBLISH-STATUS.md](PUBLISH-STATUS.md).
 
 ## Form fields
 
@@ -10,7 +10,7 @@ Prepared 2026-11-16. This is upload material, not a published Nexus page.
 - File title: Guardian Drone 0.2.0 - Single-player Beta
 - File: `artifacts/nexus-0.2.0/GuardianDrone-0.2.0-Nexus.zip`
 - Summary: A free, indestructible drone that follows you, fires at nearby supported threats, and treats external wounds. Checks its firing lane; rounds in flight can still hit you. Single-player beta.
-- Suggested category: Gameplay, or a companions category if offered for this game.
+- Actual category: Miscellaneous (the category offered for this game).
 - In-game languages: English, Simplified Chinese.
 - Installation: manual, Windows x64. Vortex installation has not been tested.
 - Nexus requirement: [CUCoreLib](https://www.nexusmods.com/scavprototype/mods/341), tested version 1.1.
@@ -97,7 +97,7 @@ Initial Nexus beta, based on Guardian Drone 0.2.0. Adds pre-fire lane checks and
 
 ## Policy references checked on 2026-11-16
 
-Nexus already requires basic AI disclosure, including new uploads during its transition period. Follow the fields shown by the live upload form. Sources: [AI policy](https://help.nexusmods.com/article/180-ai-policy-changes-2026), [file submission guidelines](https://help.nexusmods.com/article/28-file-submission-guidelines). These notes do not mark any Nexus submission, scan, moderation or publication as complete.
+Nexus already requires basic AI disclosure, including new uploads during its transition period. Follow the fields shown by the live upload form. Sources: [AI policy](https://help.nexusmods.com/article/180-ai-policy-changes-2026), [file submission guidelines](https://help.nexusmods.com/article/28-file-submission-guidelines). Observed publication and site-scan results are recorded separately in [PUBLISH-STATUS.md](PUBLISH-STATUS.md).
 
 ## Reproduce the upload archive
 
