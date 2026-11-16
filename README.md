@@ -4,6 +4,8 @@ Casualties: Unknown 的独立同伴模组，当前玩家包是 0.2.0。免费、
 
 0.1.0 的可玩性没有通过，那个 ZIP 和标签保留作历史记录。[0.2.0 验收](docs/V0.2.0.md) 记录了这一版实测过和还没测的项目。
 
+[2026-11-16 发布前复核](docs/NEXUS-PREFLIGHT-2026-11-16.md)：最终 0.2.0 DLL 已补做隔离回归，准备按 Windows 单人 Beta 上架。Nexus 上传材料与已知限制见 [页面草稿](release/nexus-0.2.0/NEXUS.md)；尚未在 Nexus 发布。
+
 ![四旋翼外形](pixel-art/guardian-drone/preview.png)
 
 A free quadcopter companion for Casualties: Unknown. It holds fire when you are in the lane, patrols several tiles away, and moves in to treat external wounds.

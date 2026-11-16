@@ -7,14 +7,15 @@ multiplayer, and unlisted mod combinations are unverified.
 0.1.0 kept firing through the player and could fail to reach a wound in a cave.
 That package remains available as the old test build. 0.2.0 checks the lane first
 and waits when it has no open cell. What this version actually passed is in
-[docs/V0.2.0.md](docs/V0.2.0.md).
+[the 0.2.0 test record](https://github.com/dumplingsup/casualties-unknown-guardian-drone/blob/main/docs/V0.2.0.md).
 
 Merge the archive's `BepInEx` folder into the game directory. The mod file belongs at
 `BepInEx/plugins/GuardianDrone/GuardianDrone.dll`.
 
 Your character receives one free controller after entering a run or loading a save.
 A second one is not granted while any controller already exists. If it is truly gone,
-one replacement is issued after a few seconds. Keep it in your carried inventory.
+one replacement is issued after a few seconds, at most once before loading the
+character or changing layers again. Keep it in your carried inventory.
 Dropping it recalls the drone and says why.
 
 - Use the controller or **F6**: deploy / recall.
@@ -29,6 +30,8 @@ space it stays about **6–9** world units away. A low cave uses a closer side p
 With no open cell it stows and returns only onto a free cell.
 
 It shoots nearby supported threats. Rounds have travel time and a little spread.
+Threat selection currently uses creature type, distance, and some sight checks;
+it can start a fight with a nearby supported creature before that creature attacks.
 If you or a bystander is already in the lane, it holds fire and tries to move.
 **A round that has already left the gun can still hit you.** Press F7 to cease fire.
 
@@ -50,3 +53,9 @@ shot interval, repair rates, and volume. Zero volume mutes the drone.
 Back up saves before removing the mod. Multiplayer, guards, turrets, and unknown
 creatures were not part of this run. The archive has no test probe, game assemblies,
 or third-party art.
+
+For a manual upgrade, close the game and replace the existing GuardianDrone.dll;
+keep only one copy. Before uninstalling, recall the drone and remove its controller,
+then save and keep a backup. Saves with custom items may require the mod to load.
+The 0.2.0 HUD may overlap the vanilla item label at the top left. Sound quality has
+not been audited in the final preflight, which runs muted.
