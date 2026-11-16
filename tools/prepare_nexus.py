@@ -28,7 +28,8 @@ def main():
     archive = out / "GuardianDrone-0.2.0-Nexus.zip"
     payload = {DLL_NAME: dll}
     for name in ["README.en.md", "README.zh-CN.md", "NOTICE.txt"]:
-        payload[name] = (ROOT / name).read_bytes()
+        # Canonical LF keeps Windows autocrlf checkouts byte-identical to the ZIP.
+        payload[name] = (ROOT / name).read_text(encoding="utf-8").encode("utf-8")
     with zipfile.ZipFile(archive, "x", zipfile.ZIP_DEFLATED) as package:
         for name, data in payload.items():
             entry = zipfile.ZipInfo(name, (2026, 11, 16, 0, 0, 0))
