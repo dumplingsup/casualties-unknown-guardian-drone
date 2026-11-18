@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using BepInEx;
@@ -12,12 +13,19 @@ using UnityEngine;
 
 namespace GuardianDrone
 {
-    [BepInPlugin(Guid, "Guardian Drone", "0.2.0")]
+    [BepInPlugin(Guid, "Guardian Drone", "0.2.1")]
     [BepInDependency("net.cucorelib", BepInDependency.DependencyFlags.HardDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "local.cu.guardiandrone";
         public const string ControllerId = "guardian_drone_controller";
+        // A layer load or save restore can leave the old drone flying through a
+        // half-built world. Keep the drone out until the new layer has been
+        // ready for a moment, then redeploy if deployment was still requested.
+        const float LoadSettleSeconds = 2.5f;
+        const float InitialGrantDelay = 1.5f;
+        const float ReplacementDelay = 3f;
+        const float PostRestoreReplacementDelay = 12f;
         public static Plugin Instance;
         public static DroneController Drone;
         public static ConfigEntry<KeyCode> DeployKey, GuardKey, HealKey;
@@ -25,8 +33,10 @@ namespace GuardianDrone
         Harmony harmony;
         Body lastBody;
         WorldGeneration lastWorld;
-        float grantAt, controllerCheckAt, missingSince, toldDeployAt, hudErrorAt;
-        bool hasController, initialGrantDone, replacementIssued, toldLeft, userToggled;
+        float controllerCheckAt, missingSince, toldDeployAt, hudErrorAt, transitionSettleUntil, nextGrantAt;
+        bool hasController, toldLeft, userToggled, transition;
+        int lastDepth = int.MinValue, lastRestoreSerial;
+        Item grantedController;
         int inventoryControllers, worldControllers;
         GUIStyle hudStyle;
         static FieldInfo mechField;
@@ -56,14 +66,15 @@ namespace GuardianDrone
             SaveRegistry.RegisterBodyProvider(DroneSave.Key, new DroneSave());
             harmony = new Harmony(Guid);
             harmony.PatchAll(typeof(Plugin).Assembly);
-            Log("Guardian 0.2.0 registered; lane check, reachable repair, status icon, single player.");
+            Log("Guardian 0.2.1 registered; transition lock, controller dedupe, lane check, reachable repair, status icon, single player.");
         }
 
         public static bool Ready => PlayerCamera.main && PlayerCamera.main.body && WorldGeneration.world &&
             WorldGeneration.world.worldExists && !WorldGeneration.world.generatingWorld && !WorldGeneration.world.cutsceneActive;
+        public static bool Transitioning => Instance && Instance.transition;
         public static bool InputReady()
         {
-            if (!Ready || PauseHandler.paused || Time.timeScale <= 0 || SettingsMenu.instance || !Application.isFocused) return false;
+            if (!Ready || Transitioning || PauseHandler.paused || Time.timeScale <= 0 || SettingsMenu.instance || !Application.isFocused) return false;
             if (!PlayerCamera.main.body.alive || !PlayerCamera.main.body.conscious) return false;
             if (ConsoleScript.instance && ConsoleScript.instance.active) return false;
             var p = PlayerCamera.main;
@@ -76,59 +87,72 @@ namespace GuardianDrone
         {
             if (!Ready)
             {
+                EnterTransition();
                 if (Drone) Drone.Suspend();
                 return;
             }
             var owner = PlayerCamera.main.body;
-            if (owner != lastBody || WorldGeneration.world != lastWorld)
+            var world = WorldGeneration.world;
+            float now = Time.unscaledTime;
+            if (DroneSave.RestoreSerial != lastRestoreSerial)
             {
-                ClearDrone(); lastBody = owner; lastWorld = WorldGeneration.world;
-                grantAt = Time.unscaledTime + 0.75f; controllerCheckAt = 0;
-                initialGrantDone = false; replacementIssued = false; toldLeft = false; userToggled = false; missingSince = -1;
+                lastRestoreSerial = DroneSave.RestoreSerial;
+                EnterTransition();
+                return;
             }
-            if (Time.unscaledTime >= controllerCheckAt)
+            if (owner != lastBody || world != lastWorld)
+            {
+                ClearDrone(); lastBody = owner; lastWorld = world; lastDepth = world.biomeDepth;
+                controllerCheckAt = 0; toldLeft = false; userToggled = false; missingSince = -1;
+                grantedController = null; nextGrantAt = 0;
+                EnterTransition();
+                return;
+            }
+            if (world.biomeDepth != lastDepth)
+            {
+                lastDepth = world.biomeDepth;
+                EnterTransition();
+                return;
+            }
+            // The descent panel is the last place the old drone can still fly.
+            // Recall it as soon as the panel appears, not only when the world
+            // starts rebuilding under it.
+            if (world.savePanel && world.savePanel.activeInHierarchy)
+            {
+                EnterTransition();
+                return;
+            }
+            if (transition)
+            {
+                if (now < transitionSettleUntil) return;
+                transition = false;
+                controllerCheckAt = 0;
+                missingSince = -1;
+                hasController = false;
+                Log("LEVEL_READY depth=" + world.biomeDepth);
+            }
+            if (now >= controllerCheckAt)
             {
                 CountControllers(owner);
                 hasController = inventoryControllers > 0;
-                controllerCheckAt = Time.unscaledTime + 0.4f;
+                controllerCheckAt = now + 0.4f;
+                var state = DroneSave.For(owner);
+                bool owned = inventoryControllers + worldControllers > 0;
+                if (owned) { state.HadController = true; missingSince = -1; }
                 if (hasController) toldLeft = false;
                 else if (worldControllers > 0 && !toldLeft)
                 {
                     toldLeft = true;
                     Tell("The controller left your inventory. Guardian recalled.");
                 }
-            }
-            if (!initialGrantDone && Time.unscaledTime >= grantAt && controllerCheckAt > 0)
-            {
-                if (inventoryControllers + worldControllers == 0)
+                if (owned)
                 {
-                    if (missingSince < 0) missingSince = Time.unscaledTime;
-                    else if (Time.unscaledTime - missingSince >= 0.8f)
-                    {
-                        GrantController(owner, "CONTROLLER_GRANTED");
-                        initialGrantDone = true;
-                        missingSince = -1;
-                    }
+                    RemoveDuplicateGrant();
                 }
-                else { initialGrantDone = true; missingSince = -1; }
+                else MaintainController(owner, state, now);
             }
-            else if (initialGrantDone)
-            {
-                if (inventoryControllers + worldControllers == 0)
-                {
-                    if (missingSince < 0) missingSince = Time.unscaledTime;
-                    else if (!replacementIssued && Time.unscaledTime - missingSince >= 3f)
-                    {
-                        replacementIssued = true;
-                        GrantController(owner, "CONTROLLER_REPLACED");
-                        Tell("A free replacement controller was issued.");
-                        missingSince = -1;
-                    }
-                }
-                else missingSince = -1;
-            }
-            var state = DroneSave.For(owner);
-            if (!owner.alive || !hasController || state.Unsupported || !state.Deployed) ClearDrone();
+            var stateNow = DroneSave.For(owner);
+            if (!owner.alive || !hasController || stateNow.Unsupported || !stateNow.Deployed) ClearDrone();
             else if (!Drone)
             {
                 var go = new GameObject("Guardian Drone");
@@ -150,28 +174,121 @@ namespace GuardianDrone
             DroneProjectile.StepAll(Mathf.Min(Time.deltaTime, 0.1f));
         }
 
+        void EnterTransition()
+        {
+            if (!transition) Log("TRANSITION begin depth=" + (WorldGeneration.world ? WorldGeneration.world.biomeDepth : -1));
+            transition = true;
+            transitionSettleUntil = Time.unscaledTime + LoadSettleSeconds;
+            if (Drone || DroneProjectile.Count > 0)
+            {
+                ClearDrone();
+                Log("TRANSITION recall");
+            }
+            hasController = false;
+            missingSince = -1;
+        }
+
         public static bool HasController(Body owner) => owner && owner.GetComponentsInChildren<Item>(true).Any(x => x.id == ControllerId);
+
+        // Counts every live controller once: hotbar and worn items, contents of
+        // container items, dropped items, and items in storage containers. Items
+        // inside an inactive container are not in Item.allItems until Start runs
+        // (common while a save mod is restoring the layer), so a scene sweep is
+        // the fallback. The custom-item template lives in DontDestroyOnLoad and
+        // is never a player-owned controller.
+        readonly HashSet<int> countedControllers = new HashSet<int>();
         void CountControllers(Body owner)
         {
             inventoryControllers = 0;
             worldControllers = 0;
-            var items = UnityEngine.Object.FindObjectsOfType<Item>();
-            for (int i = 0; i < items.Length; i++)
+            countedControllers.Clear();
+            var own = owner.GetComponentsInChildren<Item>(true);
+            for (int i = 0; i < own.Length; i++)
             {
-                var item = items[i];
-                if (!item || item.id != ControllerId) continue;
-                if (item.GetComponentInParent<Body>() == owner) inventoryControllers++;
+                var item = own[i];
+                if (!item || item.id != ControllerId || !countedControllers.Add(item.GetInstanceID())) continue;
+                inventoryControllers++;
+            }
+            var live = Item.allItems;
+            for (int i = 0; i < live.Count; i++)
+            {
+                var item = live[i];
+                if (!item || item.id != ControllerId || !countedControllers.Add(item.GetInstanceID())) continue;
+                if (item.transform.IsChildOf(owner.transform)) inventoryControllers++;
+                else worldControllers++;
+            }
+            if (inventoryControllers + worldControllers > 0) return;
+            var scene = UnityEngine.Object.FindObjectsOfType<Item>(true);
+            for (int i = 0; i < scene.Length; i++)
+            {
+                var item = scene[i];
+                if (!item || item.id != ControllerId || !countedControllers.Add(item.GetInstanceID())) continue;
+                if (!item.gameObject.scene.IsValid() || item.gameObject.scene.name == "DontDestroyOnLoad") continue;
+                // QoL Unknown's in-depth save clones the custom item template
+                // without activating it, so a restored controller sits inert and
+                // cannot be picked up. Wake it instead of issuing a second one.
+                if (!item.gameObject.activeSelf)
+                {
+                    item.gameObject.SetActive(true);
+                    Log("CONTROLLER_ACTIVATED");
+                }
+                if (item.transform.IsChildOf(owner.transform)) inventoryControllers++;
                 else worldControllers++;
             }
         }
-        static void GrantController(Body owner, string reason)
+
+        void MaintainController(Body owner, DroneState state, float now)
+        {
+            if (now < nextGrantAt) return;
+            // After a save restore, let the save mod finish restoring the layer
+            // (including storage containers) before handing out anything.
+            if (DroneSave.RestoredWithin(now, PostRestoreReplacementDelay)) return;
+            if (missingSince < 0) missingSince = now;
+            float delay = state.HadController ? ReplacementDelay : InitialGrantDelay;
+            if (now - missingSince < delay) return;
+            // Last look immediately before handing out an item. This closes the
+            // window where a storage container or a save restore finishes a few
+            // milliseconds after the periodic scan.
+            CountControllers(owner);
+            hasController = inventoryControllers > 0;
+            if (inventoryControllers + worldControllers > 0)
+            {
+                state.HadController = true;
+                missingSince = -1;
+                return;
+            }
+            bool replacement = state.HadController;
+            var item = GrantController(owner, replacement ? "CONTROLLER_REPLACED" : "CONTROLLER_GRANTED");
+            nextGrantAt = now + 20f;
+            missingSince = -1;
+            if (!item) return;
+            grantedController = item;
+            state.HadController = true;
+            if (replacement) Tell("A free replacement controller was issued.");
+        }
+
+        // A save mod can restore the original controller after we already issued
+        // a replacement. Keep only the item the player owned before, and remove
+        // the one this session created. Existing duplicates are left alone.
+        void RemoveDuplicateGrant()
+        {
+            if (!grantedController) { grantedController = null; return; }
+            if (inventoryControllers + worldControllers <= 1) return;
+            Log("CONTROLLER_DEDUPE");
+            Destroy(grantedController.gameObject);
+            grantedController = null;
+            Tell("Duplicate controller removed.");
+        }
+
+        static Item GrantController(Body owner, string reason)
         {
             var obj = Utils.Create(ControllerId, owner.transform.position, 0);
-            if (!obj || !obj.TryGetComponent<Item>(out var item)) return;
+            if (!obj || !obj.TryGetComponent<Item>(out var item)) return null;
             var slot = owner.FirstEmptySlot();
             if (slot.HasValue) owner.PickUpItem(item, slot.Value, true);
             else Tell("Inventory full. Your drone controller is at your feet.");
             Log(reason + " body=" + owner.GetInstanceID());
+            return item;
         }
         void OnGUI()
         {
@@ -195,7 +312,8 @@ namespace GuardianDrone
                 hudStyle.normal.textColor = Color.white;
             }
             string posture = state.Guard ? Tr("Escort fire") : Tr("Ceasefire");
-            string activity = !hasController ? Tr("Controller missing")
+            string activity = Transitioning ? Tr("Level loading")
+                : !hasController ? Tr("Controller missing")
                 : !state.Deployed ? Tr("Recalled")
                 : Drone && Drone.Stowed ? Tr("Waiting for space")
                 : Drone ? Tr(ActivityEnglish(Drone.Mode))
@@ -242,6 +360,7 @@ namespace GuardianDrone
             // Explicit item use is also valid from its inventory/radial action menu.
             // Keyboard shortcuts retain the stricter UI and focus guards above.
             if (!Ready || PauseHandler.paused || Time.timeScale <= 0 || !body || !body.alive || body != PlayerCamera.main.body) return;
+            if (Transitioning) { Tell("Guardian is locked until the level finishes loading."); return; }
             if (!HasController(body)) { Tell("Keep the drone controller in your inventory."); return; }
             var state = DroneSave.For(body);
             if (state.Unsupported) { Tell("This drone save is from a newer version."); return; }
