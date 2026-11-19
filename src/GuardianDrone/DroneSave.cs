@@ -14,6 +14,7 @@ namespace GuardianDrone
 
     public sealed class DroneState
     {
+        public const int SkinCount = 3;
         public bool Deployed;
         public bool Guard = true;
         public bool HadController;

@@ -46,27 +46,30 @@ namespace GuardianDrone
     {
         public bool Healing { get; private set; }
         public Vector2 Muzzle => gun.TransformPoint(new Vector3(0.65f,0,0));
+        public int Skin => skin;
         Transform hull, gun;
-        SpriteRenderer shell, eye, rotor;
+        SpriteRenderer shell, eye, rotor, tool;
         LineRenderer beam, pulse;
         float pulseUntil;
         Vector2 healTarget;
-        int sorting;
+        int sorting, skin;
         string layer;
         SpriteRenderer[] parts;
         Light2D lamp;
-        public void Build(Body owner)
+        string SkinArt(string baseName) => skin <= 0 ? baseName : baseName + "_" + skin;
+        public void Build(Body owner, int model = 0)
         {
             DroneArt.Materials();
+            skin = Mathf.Clamp(model, 0, DroneState.SkinCount - 1);
             var source = owner.limbs[1].GetComponent<SpriteRenderer>();
             sorting = source ? source.sortingOrder + 40 : 80;
             layer = source ? source.sortingLayerName : "Default";
             hull = new GameObject("hull").transform; hull.SetParent(transform, false);
-            shell = Part("hull", "hull", hull, Vector2.zero, 0);
+            shell = Part("hull", SkinArt("hull"), hull, Vector2.zero, 0);
             eye = Part("eye", "eye", hull, Vector2.zero, 1);
-            rotor = Part("rotor", "rotor0", hull, Vector2.zero, 1);
+            rotor = Part("rotor", SkinArt("rotor0"), hull, Vector2.zero, 1);
             gun = new GameObject("tool").transform; gun.SetParent(hull, false); gun.localPosition = new Vector2(0.1f, -0.78f);
-            Part("tool", "tool", gun, Vector2.zero, 2);
+            tool = Part("tool", SkinArt("tool"), gun, Vector2.zero, 2);
             beam = MakeLine("nanite-guide", new Color(0.25f, 1f, 0.68f, 0.8f), 0.08f);
             pulse = MakeLine("escort-pulse", new Color(1f, 0.65f, 0.2f, 1), 0.065f);
             parts = hull.GetComponentsInChildren<SpriteRenderer>();
@@ -93,6 +96,15 @@ namespace GuardianDrone
             line.startColor = color; line.endColor = new Color(color.r, color.g, color.b, 0.35f);
             line.sortingLayerName = layer; line.sortingOrder = sorting + 3; line.enabled = false; return line;
         }
+        public void SetSkin(int model)
+        {
+            model = Mathf.Clamp(model, 0, DroneState.SkinCount - 1);
+            if (model == skin) return;
+            skin = model;
+            shell.sprite = DroneArt.Get(SkinArt("hull"));
+            rotor.sprite = DroneArt.Get(SkinArt("rotor0"));
+            tool.sprite = DroneArt.Get(SkinArt("tool"));
+        }
         public void SetHealing(bool active, Vector2 point) { Healing = active; healTarget = point; }
         public void Aim(Vector2 aim)
         {
@@ -113,7 +125,7 @@ namespace GuardianDrone
             hull.localRotation = Quaternion.Euler(0, 0, Mathf.Clamp(-velocity.x * 0.8f, -12, 12));
             bool hot = mode == "reposition" || mode == "blocked" || mode == "guard";
             eye.color = Healing ? new Color(0.3f, 1f, 0.65f) : hot ? new Color(1f, 0.5f, 0.2f) : new Color(0.5f, 0.9f, 1f);
-            rotor.sprite = DroneArt.Get(((int)(phase * 14) & 1) == 0 ? "rotor0" : "rotor1");
+            rotor.sprite = DroneArt.Get(SkinArt(((int)(phase * 14) & 1) == 0 ? "rotor0" : "rotor1"));
             var d = aim - (Vector2)gun.position;
             gun.rotation = Quaternion.Euler(0, 0, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
             beam.enabled = Healing;

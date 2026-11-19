@@ -13,12 +13,13 @@ using UnityEngine;
 
 namespace GuardianDrone
 {
-    [BepInPlugin(Guid, "Guardian Drone", "0.3.0")]
+    [BepInPlugin(Guid, "Guardian Drone", "0.4.0")]
     [BepInDependency("net.cucorelib", BepInDependency.DependencyFlags.HardDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "local.cu.guardiandrone";
         public const string ControllerId = "guardian_drone_controller";
+        public const string ModelOptionId = "local.cu.guardiandrone.model";
         // A layer load or save restore can leave the old drone flying through a
         // half-built world. Keep the drone out until the new layer has been
         // ready for a moment, then redeploy if deployment was still requested.
@@ -30,6 +31,7 @@ namespace GuardianDrone
         public static DroneController Drone;
         public static ConfigEntry<KeyCode> DeployKey, GuardKey, HealKey;
         public static ConfigEntry<float> Damage, ShotInterval, BleedRepair, TissueRepair, PatrolRadius, Volume, CriticalBleed;
+        public static int SelectedSkin;
         Harmony harmony;
         Body lastBody;
         WorldGeneration lastWorld;
@@ -55,10 +57,30 @@ namespace GuardianDrone
             PatrolRadius = Config.Bind("Support", "PatrolRadius", 8f, new ConfigDescription("Cruising distance from the owner. Moves closer to treat wounds.", new AcceptableValueRange<float>(4f, 14f)));
             Volume = Config.Bind("Support", "Volume", 0.35f, new ConfigDescription("Rotor, shot, heal and deploy volume. Zero mutes the drone.", new AcceptableValueRange<float>(0f, 1f)));
             CriticalBleed = Config.Bind("Support", "CriticalBleed", 10f, new ConfigDescription("In auto priority, total bleeding at or above this overrides an active fight so the drone can treat you.", new AcceptableValueRange<float>(1f, 40f)));
+            try
+            {
+                ModOptionsRegistry.Register(ModOptionDefinition.Dropdown(
+                    ModelOptionId,
+                    "Model",
+                    "Cosmetic model for the Guardian drone.",
+                    "Guardian Drone",
+                    0,
+                    new[]
+                    {
+                        new ModDropdownChoice("standard", "Standard"),
+                        new ModDropdownChoice("industrial", "Industrial"),
+                        new ModDropdownChoice("stealth", "Stealth")
+                    },
+                    ApplyModel));
+                var model = Settings.Get<SettingDropdown>(ModelOptionId);
+                SelectedSkin = model != null ? Mathf.Clamp(model.value, 0, DroneState.SkinCount - 1) : 0;
+                Log("MODEL option=" + ModelOptionId + " value=" + SelectedSkin);
+            }
+            catch (Exception e) { Log("MODEL option registration failed: " + e.Message); }
             ItemRegistry.Register(ControllerId, new CustomItemInfo
             {
                 fullName = "Guardian drone controller",
-                description = "Free, indestructible patrol drone. Use or F6: deploy/recall. F7: guard/ceasefire. F8: cycle auto / defense / medical priority. Auto fights an active threat and treats wounds when clear; defense keeps fighting while an enemy is on screen and pauses treatment; medical prioritizes treatment. Holds fire when you or a bystander is in the shot lane, then moves to a clear flank. Rounds already in flight can still hit you. Patrols about 6-9 tiles away in the open and closer beside you in a low cave. Waits instead of entering a wall when no open cell exists. Repairs external bleeding, skin and muscle. No battery, ammo or medicine. Does not restore blood, organs, bones or missing limbs. Single-player.",
+                description = "Free, indestructible patrol drone. Use or F6: deploy/recall. F7: guard/ceasefire. F8: cycle auto / defense / medical priority. The cosmetic model is selected in Settings > Guardian Drone. Auto fights an active threat and treats wounds when clear; defense keeps fighting while an enemy is on screen and pauses treatment; medical prioritizes treatment. Holds fire when you or a bystander is in the shot lane, then moves to a clear flank. Rounds already in flight can still hit you. Patrols about 6-9 tiles away in the open and closer beside you in a low cave. Waits instead of entering a wall when no open cell exists. Repairs external bleeding, skin and muscle. No battery, ammo or medicine. Does not restore blood, organs, bones or missing limbs. Single-player.",
                 category = "tool", weight = 0.05f, value = 0, usable = true,
                 usableWithLMB = false, destroyAtZeroCondition = false, decayMinutes = 0,
                 SpawnFrequency = 0, rec = new Recognition(0),
@@ -67,7 +89,7 @@ namespace GuardianDrone
             SaveRegistry.RegisterBodyProvider(DroneSave.Key, new DroneSave());
             harmony = new Harmony(Guid);
             harmony.PatchAll(typeof(Plugin).Assembly);
-            Log("Guardian 0.3.0 registered; priority cycle, screen threat hold, controller dedupe, lane check, single player.");
+            Log("Guardian 0.4.0 registered; priority cycle, settings model, screen threat hold, controller dedupe, single player.");
         }
 
         public static bool Ready => PlayerCamera.main && PlayerCamera.main.body && WorldGeneration.world &&
@@ -402,6 +424,12 @@ namespace GuardianDrone
             s.Priority = SupportPriority.Medical;
             Tell(PrioritySentence(SupportPriority.Medical));
             Log("PRIORITY Medical");
+        }
+        public static void ApplyModel(int value)
+        {
+            SelectedSkin = Mathf.Clamp(value, 0, DroneState.SkinCount - 1);
+            if (Drone) Drone.SetSkin(SelectedSkin);
+            Log("MODEL " + SelectedSkin);
         }
         static string PriorityShort(SupportPriority priority)
         {

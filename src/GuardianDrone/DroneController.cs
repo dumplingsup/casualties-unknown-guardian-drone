@@ -43,10 +43,12 @@ namespace GuardianDrone
         public void Initialize(Body owner)
         {
             Owner = owner;
-            visual = gameObject.AddComponent<DroneVisual>(); visual.Build(owner);
+            visual = gameObject.AddComponent<DroneVisual>(); visual.Build(owner, Plugin.SelectedSkin);
             previousPosition = transform.position;
             DroneAudio.Deploy(transform.position);
         }
+        public void SetSkin(int model) { if (visual) visual.SetSkin(model); }
+        public int Skin => visual ? visual.Skin : Plugin.SelectedSkin;
         public void Suspend() { if (visual) visual.Hide(); }
         public void Step(float dt)
         {
