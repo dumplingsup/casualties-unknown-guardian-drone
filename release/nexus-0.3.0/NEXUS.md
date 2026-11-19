@@ -34,7 +34,7 @@ This is a **single-player beta for Windows x64**, tested with Steam build **2666
 - **Treatment no longer silently disables the drone.** The old treatment latch cleared the combat target, so a single wound could stop it shooting for most of a fight. The drone now holds the target, stops treatment when combat takes priority, and resumes after the threat clears.
 - **Enemy recognition fixes.** Crystal enemies were on a layer the drone never scanned; guards and turrets are marked indestructible only to bypass the generic destruction path and were being ignored. All three are now recognized. A trader is treated as hostile only after its hostility flag becomes hostile.
 - **Priority is saved with the character.** Old 0.2.1 saves have no priority field and load as Auto.
-- Tested with a real 0.2.1 checkpoint as well as a fresh 0.3.0 save. The isolated test record is in the source repository's `docs/V0.3.0.md`.
+- Tested with a real 0.2.1 checkpoint, a fresh 0.3.0 save, Save Anywhere 1.5.0 and the QoL Unknown 7 v1.1.4 deep-save bug checkpoint. The isolated test record is in the source repository's `docs/V0.3.0.md`.
 
 ### What it does
 
@@ -76,7 +76,7 @@ Target selection uses a limited list of native creature types, distance, engagem
 ### Compatibility and known limits
 
 - Tested as a single-player mod. Multiplayer is unverified.
-- Save Anywhere 1.5.0 and QoL Unknown 7 v1.1.4 were tested for 0.2.1; the 0.3.0 change only adds an optional save field, but their combination was not re-run for 0.3.0.
+- Save Anywhere 1.5.0 was re-tested with 0.3.0: a forced save with the controller in the hotbar and the drone deployed reloads as one controller and one drone, with Defense priority kept. QoL Unknown 7 v1.1.4 was re-tested with its 0.2.0 deep-save bug checkpoint: 0.3.0 activates the restored inactive controller, does not grant a second one, and pickup leaves one controller and one drone.
 - Wayfarer Mech is optional. The code contains an integration, but the combination was not retested for 0.3.0.
 - The status panel can overlap the vanilla item label at the top left, particularly in a smaller window.
 - Final preflight was muted. Audio is present in the code, but sound quality and audibility were not audited there.
