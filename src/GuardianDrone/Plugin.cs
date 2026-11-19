@@ -13,7 +13,7 @@ using UnityEngine;
 
 namespace GuardianDrone
 {
-    [BepInPlugin(Guid, "Guardian Drone", "0.2.1")]
+    [BepInPlugin(Guid, "Guardian Drone", "0.3.0")]
     [BepInDependency("net.cucorelib", BepInDependency.DependencyFlags.HardDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
@@ -29,7 +29,7 @@ namespace GuardianDrone
         public static Plugin Instance;
         public static DroneController Drone;
         public static ConfigEntry<KeyCode> DeployKey, GuardKey, HealKey;
-        public static ConfigEntry<float> Damage, ShotInterval, BleedRepair, TissueRepair, PatrolRadius, Volume;
+        public static ConfigEntry<float> Damage, ShotInterval, BleedRepair, TissueRepair, PatrolRadius, Volume, CriticalBleed;
         Harmony harmony;
         Body lastBody;
         WorldGeneration lastWorld;
@@ -47,17 +47,18 @@ namespace GuardianDrone
             Instance = this;
             DeployKey = Config.Bind("Controls", "DeployRecall", KeyCode.F6, "Deploy / recall; requires the free controller in your inventory.");
             GuardKey = Config.Bind("Controls", "GuardCeasefire", KeyCode.F7, "Toggle automatic attacks; automatic healing remains enabled.");
-            HealKey = Config.Bind("Controls", "HealNow", KeyCode.F8, "Prioritize supported external wounds.");
+            HealKey = Config.Bind("Controls", "HealNow", KeyCode.F8, "Cycle support priority: auto / defense / medical.");
             Damage = Config.Bind("Support", "ShotDamage", 25f, new ConfigDescription("Pulse damage. No energy or ammo cost.", new AcceptableValueRange<float>(1f, 200f)));
             ShotInterval = Config.Bind("Support", "ShotInterval", 0.45f, new ConfigDescription("Seconds between pulses.", new AcceptableValueRange<float>(0.15f, 5f)));
             BleedRepair = Config.Bind("Support", "BleedingRepairPerSecond", 5f, new ConfigDescription("External bleeding reduction per second on one limb.", new AcceptableValueRange<float>(0.1f, 50f)));
             TissueRepair = Config.Bind("Support", "TissueRepairPerSecond", 5f, new ConfigDescription("Skin and muscle recovery per second on one limb.", new AcceptableValueRange<float>(0.1f, 50f)));
             PatrolRadius = Config.Bind("Support", "PatrolRadius", 8f, new ConfigDescription("Cruising distance from the owner. Moves closer to treat wounds.", new AcceptableValueRange<float>(4f, 14f)));
             Volume = Config.Bind("Support", "Volume", 0.35f, new ConfigDescription("Rotor, shot, heal and deploy volume. Zero mutes the drone.", new AcceptableValueRange<float>(0f, 1f)));
+            CriticalBleed = Config.Bind("Support", "CriticalBleed", 10f, new ConfigDescription("In auto priority, total bleeding at or above this overrides an active fight so the drone can treat you.", new AcceptableValueRange<float>(1f, 40f)));
             ItemRegistry.Register(ControllerId, new CustomItemInfo
             {
                 fullName = "Guardian drone controller",
-                description = "Free, indestructible patrol drone. Use or F6: deploy/recall. F7: guard/ceasefire. F8: prioritize treatment. Holds fire when you or a bystander is in the shot lane, then moves to a clear flank. Rounds already in flight can still hit you. Patrols about 6-9 tiles away in the open and closer beside you in a low cave. Waits instead of entering a wall when no open cell exists. Repairs external bleeding, skin and muscle. No battery, ammo or medicine. Does not restore blood, organs, bones or missing limbs. Single-player.",
+                description = "Free, indestructible patrol drone. Use or F6: deploy/recall. F7: guard/ceasefire. F8: cycle auto / defense / medical priority. Auto fights an active threat and treats wounds when clear; defense keeps fighting while an enemy is on screen and pauses treatment; medical prioritizes treatment. Holds fire when you or a bystander is in the shot lane, then moves to a clear flank. Rounds already in flight can still hit you. Patrols about 6-9 tiles away in the open and closer beside you in a low cave. Waits instead of entering a wall when no open cell exists. Repairs external bleeding, skin and muscle. No battery, ammo or medicine. Does not restore blood, organs, bones or missing limbs. Single-player.",
                 category = "tool", weight = 0.05f, value = 0, usable = true,
                 usableWithLMB = false, destroyAtZeroCondition = false, decayMinutes = 0,
                 SpawnFrequency = 0, rec = new Recognition(0),
@@ -66,7 +67,7 @@ namespace GuardianDrone
             SaveRegistry.RegisterBodyProvider(DroneSave.Key, new DroneSave());
             harmony = new Harmony(Guid);
             harmony.PatchAll(typeof(Plugin).Assembly);
-            Log("Guardian 0.2.1 registered; transition lock, controller dedupe, lane check, reachable repair, status icon, single player.");
+            Log("Guardian 0.3.0 registered; priority cycle, screen threat hold, controller dedupe, lane check, single player.");
         }
 
         public static bool Ready => PlayerCamera.main && PlayerCamera.main.body && WorldGeneration.world &&
@@ -168,7 +169,7 @@ namespace GuardianDrone
             {
                 if (Input.GetKeyDown(DeployKey.Value)) ToggleDeployment();
                 if (Input.GetKeyDown(GuardKey.Value)) ToggleGuard();
-                if (Input.GetKeyDown(HealKey.Value)) HealNow();
+                if (Input.GetKeyDown(HealKey.Value)) TogglePriority();
             }
             if (Drone) Drone.Step(Mathf.Min(Time.deltaTime, 0.1f));
             DroneProjectile.StepAll(Mathf.Min(Time.deltaTime, 0.1f));
@@ -311,11 +312,12 @@ namespace GuardianDrone
                 hudStyle = new GUIStyle(GUI.skin.label) { fontSize = 16, richText = false };
                 hudStyle.normal.textColor = Color.white;
             }
-            string posture = state.Guard ? Tr("Escort fire") : Tr("Ceasefire");
+            string posture = (state.Guard ? Tr("Escort fire") : Tr("Ceasefire")) + " · " + Tr(PriorityShort(state.Priority));
             string activity = Transitioning ? Tr("Level loading")
                 : !hasController ? Tr("Controller missing")
                 : !state.Deployed ? Tr("Recalled")
                 : Drone && Drone.Stowed ? Tr("Waiting for space")
+                : Drone && Drone.TreatmentHeld ? Tr("Holding treatment")
                 : Drone ? Tr(ActivityEnglish(Drone.Mode))
                 : Tr("Waiting");
             var icon = DroneArt.Get("controller");
@@ -341,6 +343,7 @@ namespace GuardianDrone
                 case "approach-medical": return "Approaching a wound";
                 case "healing": return "Repairing";
                 case "stowed": return "Waiting for space";
+                case "defending": return "Defending";
                 default: return "Patrolling";
             }
         }
@@ -381,13 +384,42 @@ namespace GuardianDrone
             s.Guard = !s.Guard;
             Tell(s.Guard ? "Guardian: escort fire enabled." : "Guardian: ceasefire. Medical support remains active.");
         }
+        public static void TogglePriority()
+        {
+            if (!InputReady()) return;
+            var s = DroneSave.For(PlayerCamera.main.body);
+            if (s.Unsupported) return;
+            s.Priority = (SupportPriority)(((int)s.Priority + 1) % 3);
+            Tell(PrioritySentence(s.Priority));
+            Log("PRIORITY " + s.Priority);
+        }
         public static void HealNow()
         {
             if (!InputReady()) return;
             if (!Drone) { Tell("Deploy your guardian first."); return; }
-            if (!Drone.HasTreatableWound) { Tell("No treatable external wounds. Blood loss and internal conditions need other treatment."); return; }
-            Drone.PrioritizeHealing();
-            Tell("Guardian: medical support requested.");
+            var s = DroneSave.For(PlayerCamera.main.body);
+            if (s.Unsupported) return;
+            s.Priority = SupportPriority.Medical;
+            Tell(PrioritySentence(SupportPriority.Medical));
+            Log("PRIORITY Medical");
+        }
+        static string PriorityShort(SupportPriority priority)
+        {
+            switch (priority)
+            {
+                case SupportPriority.Defense: return "Defense";
+                case SupportPriority.Medical: return "Medical";
+                default: return "Auto";
+            }
+        }
+        static string PrioritySentence(SupportPriority priority)
+        {
+            switch (priority)
+            {
+                case SupportPriority.Defense: return "Guardian priority: Defense.";
+                case SupportPriority.Medical: return "Guardian priority: Medical.";
+                default: return "Guardian priority: Auto.";
+            }
         }
         public static Vector2 Anchor(Body body, out bool piloting)
         {

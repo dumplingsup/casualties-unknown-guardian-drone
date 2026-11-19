@@ -5,12 +5,20 @@ using UnityEngine;
 
 namespace GuardianDrone
 {
+    public enum SupportPriority
+    {
+        Auto = 0,
+        Defense = 1,
+        Medical = 2
+    }
+
     public sealed class DroneState
     {
         public bool Deployed;
         public bool Guard = true;
         public bool HadController;
         public bool Unsupported;
+        public SupportPriority Priority = SupportPriority.Auto;
         public int Version = 1;
         public JObject Original = new JObject();
     }
@@ -36,6 +44,7 @@ namespace GuardianDrone
                 result["deployed"] = state.Deployed;
                 result["guard"] = state.Guard;
                 result["hadController"] = state.HadController;
+                result["priority"] = (int)state.Priority;
             }
             return result;
         }
@@ -56,7 +65,11 @@ namespace GuardianDrone
             var had = state.Original["hadController"];
             state.HadController = !state.Unsupported &&
                 (had?.Type == JTokenType.Boolean ? (bool)had : state.Deployed);
-            Plugin.Log("RESTORE deployed=" + state.Deployed + " guard=" + state.Guard + " hadController=" + state.HadController + " unsupported=" + state.Unsupported);
+            var priority = state.Original["priority"];
+            state.Priority = priority?.Type == JTokenType.Integer
+                ? (SupportPriority)Mathf.Clamp((int)priority, 0, 2)
+                : SupportPriority.Auto;
+            Plugin.Log("RESTORE deployed=" + state.Deployed + " guard=" + state.Guard + " priority=" + state.Priority + " hadController=" + state.HadController + " unsupported=" + state.Unsupported);
         }
     }
 }

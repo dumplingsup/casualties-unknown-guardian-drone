@@ -1,26 +1,28 @@
 # Guardian Drone
 
-Casualties: Unknown 的独立同伴模组，当前 GitHub 玩家包是 0.2.1（[Release v0.2.1](https://github.com/dumplingsup/casualties-unknown-guardian-drone/releases/tag/v0.2.1)）；Nexus 页面仍由作者手动更新，材料在 `release/nexus-0.2.1/`。免费、无敌的四旋翼在开阔处大约 6–9 格外巡航；主角挡住弹道时会停火并换位，已经飞出的弹丸仍可能命中。治疗时靠近，止住外伤出血并修复皮肤和肌肉。
+Casualties: Unknown 的独立同伴模组，当前版本是 **0.3.0**。免费、无敌的四旋翼在开阔处大约 6–9 格外巡航；主角挡住弹道时会停火并换位，已经飞出的弹丸仍可能命中。治疗时靠近，止住外伤出血并修复皮肤和肌肉。
 
-0.1.0 的可玩性没有通过，那个 ZIP 和标签保留作历史记录。[0.2.0 验收](docs/V0.2.0.md) 记录了这一版实测过和还没测的项目。0.2.1 修复了随时存档模组造成的重复控制器和换层时的无人机卡死：[0.2.1 修复记录](docs/V0.2.1.md)。0.2.1 已在隔离副本里与真实的 Save Anywhere 1.5.0 和报告链接的 QoL Unknown 7 v1.1.4 同测：控制器在快捷栏或随身背包中读档后仍只有一只；QoL 还原成未激活状态的自定义控制器会被本模组激活并保留，不再补发；确认面板换层不卡死。
+0.3.0 重做战斗／治疗优先级：F8 循环 **自动 → 防御优先 → 医疗优先**。自动模式有交战目标时先战斗，安全时治疗，总出血达到临界值才急救；防御优先以屏幕内可见威胁为界，威胁出现立即暂停治疗，画面清空并稳定后再治疗。同时修复了治疗锁存清空战斗目标，以及守卫、炮塔和 `CrystalEnemy` 因白名单／扫描层／`indestructible` 标志被忽略的问题。[0.3.0 验收](docs/V0.3.0.md) 记录了逐项实测。
 
-[Guardian Drone 0.2.0 已在 Nexus 发布](https://www.nexusmods.com/scavprototype/mods/985)，定位为 Windows 单人 Beta。最终 DLL 的隔离回归见 [2026-11-16 发布前复核](docs/NEXUS-PREFLIGHT-2026-11-16.md)，页面、文件和扫描结果见 [发布记录](release/nexus-0.2.0/PUBLISH-STATUS.md)。
+0.2.1 修复了随时存档模组造成的重复控制器和换层时的无人机卡死：[0.2.1 修复记录](docs/V0.2.1.md)。0.1.0 的可玩性没有通过，那个 ZIP 和标签保留作历史记录。[0.2.0 验收](docs/V0.2.0.md) 记录了这一版实测过和还没测的项目。
+
+[Guardian Drone 在 Nexus mod 985](https://www.nexusmods.com/scavprototype/mods/985)，定位为 Windows 单人 Beta。0.3.0 的页面、文件和哈希材料在 `release/nexus-0.3.0/`，由作者在网页手动提交。
 
 ![四旋翼外形](pixel-art/guardian-drone/preview.png)
 
 A free quadcopter companion for Casualties: Unknown. It holds fire when you are in the lane, patrols several tiles away, and moves in to treat external wounds.
 
-**F6** 部署／收回，**F7** 停火，**F8** 优先治疗。需要 BepInEx 5 和 CUCoreLib 1.1。插件 GUID 是 `local.cu.guardiandrone`，这是存档契约，不要随手改名。
+**F6** 部署／收回，**F7** 停火，**F8** 循环自动／防御优先／医疗优先。需要 BepInEx 5 和 CUCoreLib 1.1。插件 GUID 是 `local.cu.guardiandrone`，这是存档契约，不要随手改名。
 
-玩家安装说明：[中文](README.zh-CN.md) · [English](README.en.md)。0.1.0 记录：[docs/V0.1.0.md](docs/V0.1.0.md)。
+玩家安装说明：[中文](README.zh-CN.md) · [English](README.en.md)。版本记录：[0.1.0](docs/V0.1.0.md) · [0.2.0](docs/V0.2.0.md) · [0.2.1](docs/V0.2.1.md) · [0.3.0](docs/V0.3.0.md)。
 
 ## 这个仓库包含什么
 
-包含模组源码、原创像素、可重跑的绘图脚本、构建说明和 0.1.0 / 0.2.0 验收记录。
+包含模组源码、原创像素、可重跑的绘图脚本、构建说明和 0.1.0 / 0.2.0 / 0.2.1 / 0.3.0 验收记录。
 
 不包含游戏程序集、BepInEx、CUCoreLib、测试存档、隔离运行日志、机甲源码或其他模组的素材。参考用的第三方无人机像素只记录了链接和观察，没有把原图放进来。见 [NOTICE.txt](NOTICE.txt) 和 [pixel-art/guardian-drone/REFERENCES.md](pixel-art/guardian-drone/REFERENCES.md)。
 
-玩家包在 GitHub Release 里。0.2.0 是 `GuardianDrone-0.2.0.zip`，0.1.0 的 ZIP 仍然留着。安装包没有写入正式游戏目录。多人、守卫和炮塔类敌人、机甲同场仍未验证。
+玩家包在 GitHub Release 里。0.3.0 是 `GuardianDrone-0.3.0.zip`，0.1.0、0.2.0、0.2.1 的 ZIP 仍然留着。安装包没有写入正式游戏目录。多人、机甲同场和未列出的敌人类型仍未验证；守卫、炮塔和 `CrystalEnemy` 已在 0.3.0 的隔离副本里实测识别。
 
 ## 构建
 
@@ -34,7 +36,7 @@ dotnet build src/GuardianDrone/GuardianDrone.csproj -c Release -p:RestoreLockedM
 python tools/package_release.py
 ```
 
-`local.props` 已被忽略。NuGet 版本由 `packages.lock.json` 锁定。发布时使用 [docs/V0.2.0.md](docs/V0.2.0.md) 里的哈希，不用一次随意重编译替换已测 ZIP。
+`local.props` 已被忽略。NuGet 版本由 `packages.lock.json` 锁定。发布时使用 [docs/V0.3.0.md](docs/V0.3.0.md) 里的哈希，不用一次随意重编译替换已测 ZIP。
 
 重画像素：
 
@@ -42,7 +44,7 @@ python tools/package_release.py
 python pixel-art/guardian-drone/build.py
 ```
 
-脚本使用 Pillow，并从本机 `pixelstudio` 模块创建画布。已提交的 PNG 就是 0.2.0 使用的原创图层，不运行脚本也能编译。
+脚本使用 Pillow，并从本机 `pixelstudio` 模块创建画布。已提交的 PNG 就是 0.2.x / 0.3.0 使用的原创图层，不运行脚本也能编译。0.3.0 没有新增外观皮肤。
 
 ## 许可
 

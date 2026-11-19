@@ -4,7 +4,7 @@
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <AssemblyName>GuardianDrone</AssemblyName>
-    <Version>0.2.1</Version>
+    <Version>0.3.0</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <!-- This project only writes build output. It never copies into the game. -->
   </PropertyGroup>

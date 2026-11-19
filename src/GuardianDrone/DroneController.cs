@@ -23,14 +23,18 @@ namespace GuardianDrone
         public bool Stowed { get; private set; }
         public bool HasTreatableWound => WorstWound(out _) != null;
         public float BodyBleed => TotalBleed();
+        public SupportPriority Priority => Owner ? DroneSave.For(Owner).Priority : SupportPriority.Auto;
+        public bool ThreatOnScreen { get; private set; }
+        public bool CombatHold { get; private set; }
+        public bool TreatmentHeld => CombatHold && HasTreatableWound;
         DroneVisual visual;
         BuildingEntity target;
         Vector2 goal, fireGoal;
         bool haveGoal, healLatch, healSoundPlayed;
-        float scanAt, shootAt, routeAt, stuckTime, priorityUntil, phase, calmUntil, blockedTellAt, offscreenTellAt, fireHoldUntil, healLogAt, redeployAt;
+        float scanAt, shootAt, routeAt, stuckTime, phase, calmUntil, blockedTellAt, offscreenTellAt, fireHoldUntil, healLogAt, redeployAt, threatAt, lastThreatAt, lastTargetAt;
         Vector2 velocity, previousPosition, previousGoal;
         List<Vector2> route = new List<Vector2>();
-        static readonly Collider2D[] Nearby = new Collider2D[256];
+        static readonly Collider2D[] Nearby = new Collider2D[512];
         static readonly RaycastHit2D[] RayHits = new RaycastHit2D[128];
         static readonly int HitMask = LayerMask.GetMask("Ground", "Body", "Limb", "Item", "Descriptor");
         readonly HashSet<int> seen = new HashSet<int>();
@@ -43,7 +47,6 @@ namespace GuardianDrone
             previousPosition = transform.position;
             DroneAudio.Deploy(transform.position);
         }
-        public void PrioritizeHealing() { priorityUntil = Time.time + 12f; healLatch = true; }
         public void Suspend() { if (visual) visual.Hide(); }
         public void Step(float dt)
         {
@@ -58,6 +61,8 @@ namespace GuardianDrone
                 velocity = Vector2.zero;
                 Mode = "stowed";
                 LaneBlocked = false;
+                CombatHold = false;
+                ThreatOnScreen = false;
                 if (Time.time >= redeployAt)
                 {
                     redeployAt = Time.time + 0.5f;
@@ -77,16 +82,43 @@ namespace GuardianDrone
             phase += dt;
             var wound = WorstWound(out float severity);
             float bleed = TotalBleed();
-            bool forced = Time.time < priorityUntil;
-            if ((wound && bleed >= 1f) || !Owner.conscious || forced) healLatch = true;
-            if (healLatch && Owner.conscious && !forced && bleed < 0.15f) healLatch = false;
             bool guarding = DroneSave.For(Owner).Guard;
+            var priority = DroneSave.For(Owner).Priority;
             if (Time.time >= scanAt)
-            { scanAt = Time.time + 0.3f; target = guarding && !pilot ? SelectTarget(anchor) : null; }
-            if (!guarding || pilot || healLatch) target = null;
+            {
+                scanAt = Time.time + 0.3f;
+                target = guarding && !pilot ? SelectTarget(anchor) : null;
+            }
+            bool engageNow = target != null;
+            if (engageNow) lastTargetAt = Time.time;
+            bool engageHold = engageNow || Time.time - lastTargetAt < 0.75f;
+
+            if (Time.time >= threatAt)
+            {
+                threatAt = Time.time + (priority == SupportPriority.Defense || healLatch ? 0.15f : 0.3f);
+                bool threatFound = guarding && !pilot && FindScreenThreat(anchor);
+                ThreatOnScreen = threatFound;
+                if (threatFound) lastThreatAt = Time.time;
+            }
+            bool screenThreat = ThreatOnScreen || Time.time - lastThreatAt < 1f;
+
+            bool forced = priority == SupportPriority.Medical;
+            float critical = Plugin.CriticalBleed == null ? 10f : Plugin.CriticalBleed.Value;
+            bool criticalBleed = bleed >= critical;
+            CombatHold = guarding && !pilot && !forced && Owner.conscious &&
+                (priority == SupportPriority.Defense
+                    ? screenThreat
+                    : priority == SupportPriority.Auto && engageHold && !criticalBleed);
+
+            if (CombatHold) healLatch = false;
+            else
+            {
+                if ((wound && bleed >= 1f) || !Owner.conscious || forced) healLatch = true;
+                if (healLatch && Owner.conscious && !forced && bleed < 0.15f) healLatch = false;
+            }
             if (target) calmUntil = Time.time + 1.5f;
-            bool light = !healLatch && !pilot && wound && severity >= 18f && Time.time >= calmUntil;
-            bool treat = wound && !pilot && (healLatch || light);
+            bool light = !healLatch && !pilot && !CombatHold && wound && severity >= 18f && Time.time >= calmUntil;
+            bool treat = wound && !pilot && !CombatHold && (healLatch || light);
             Vector2 aim = treat ? (Vector2)wound.transform.position : anchor;
             bool onScreen = true;
             bool holdingFire = !treat && target && Time.time < fireHoldUntil && DroneNavigation.Free(fireGoal);
@@ -111,7 +143,7 @@ namespace GuardianDrone
             }
             if (!treat && !onScreen && Time.time >= offscreenTellAt && haveGoal)
             { offscreenTellAt = Time.time + 8f; Plugin.Tell("Guardian is outside the camera."); }
-            Vector2 look = target ? (Vector2)target.transform.position : aim;
+            Vector2 look = treat ? aim : target ? (Vector2)target.transform.position : aim;
             visual.Aim(look);
             bool healed = false;
             if (treat && Vector2.Distance(visual.Muzzle, aim) <= HealReach && Visible(visual.Muzzle, aim, null, Owner))
@@ -142,11 +174,12 @@ namespace GuardianDrone
             else healSoundPlayed = false;
             visual.SetHealing(healed, aim);
             LaneBlocked = false;
-            if (!healed && !healLatch && guarding && target && Time.time >= shootAt)
+            if (!treat && guarding && target && Time.time >= shootAt)
                 ConsiderFire(anchor, look);
             if (!treat && Time.time < fireHoldUntil) Mode = "reposition";
             else if (!treat && haveGoal && Mode != "blocked" && Mode != "offscreen")
                 Mode = goal.y < anchor.y + 2.6f ? "escort" : "patrol";
+            if (CombatHold && !target) Mode = "defending";
             visual.Animate(velocity, Mode, look, phase);
         }
         public void RecordImpact(bool friendly) { if (friendly) FriendlyHits++; else EnemyHits++; }
@@ -282,6 +315,14 @@ namespace GuardianDrone
             float halfW = Mathf.Max(1f, halfH * camera.aspect - 0.4f);
             return Mathf.Abs(delta.x) <= halfW && Mathf.Abs(delta.y) <= halfH;
         }
+        static bool ScreenVisible(Camera camera, Vector2 point, float margin)
+        {
+            if (!camera || !camera.orthographic) return true;
+            var delta = point - (Vector2)camera.transform.position;
+            float halfH = Mathf.Max(1f, camera.orthographicSize + margin);
+            float halfW = Mathf.Max(1f, halfH * camera.aspect + margin);
+            return Mathf.Abs(delta.x) <= halfW && Mathf.Abs(delta.y) <= halfH;
+        }
         float TotalBleed()
         {
             float sum = 0;
@@ -316,19 +357,31 @@ namespace GuardianDrone
         }
         public static bool IsEnemy(BuildingEntity b)
         {
-            if (!b || b.cantHit || b.indestructible || b.health <= 0 || !Listed(b)) return false;
+            // Scripted hostiles (guards, turrets, crystal enemies) handle their own
+            // death. Their BuildingEntity is marked indestructible only to bypass
+            // the generic destruction path, so that flag must not make them immune
+            // to target selection.
+            if (!b || b.cantHit || b.health <= 0 || !Listed(b)) return false;
             return true;
         }
-        static bool Listed(BuildingEntity b) => b.GetComponent<SpiderHandler>() || b.GetComponent<CaveTicks>() ||
-            b.GetComponent<LaserDroneScript>() || b.GetComponent<GuardScript>() || b.GetComponent<TurretScript>() ||
-            b.GetComponent<CeilingTurret>();
+        static bool Listed(BuildingEntity b)
+        {
+            var trader = b.GetComponent<TraderScript>();
+            if (trader && trader.hostile) return true;
+            return b.GetComponent<SpiderHandler>() || b.GetComponent<CaveTicks>() ||
+                b.GetComponent<LaserDroneScript>() || b.GetComponent<GuardScript>() || b.GetComponent<TurretScript>() ||
+                b.GetComponent<CeilingTurret>() || b.GetComponent<CrystalEnemy>();
+        }
         public static bool Engaging(BuildingEntity b, Body owner)
         {
             if (!owner || !IsEnemy(b)) return false;
             float distance = Vector2.Distance(owner.transform.position, b.transform.position);
             if (b.GetComponent<SpiderHandler>() || b.GetComponent<CaveTicks>()) return distance <= 10f;
+            if (b.GetComponent<CrystalEnemy>()) return distance <= 16f;
             if (b.GetComponent<LaserDroneScript>()) return distance <= 14f;
             if (b.GetComponent<GuardScript>()) return distance <= 9f;
+            var trader = b.GetComponent<TraderScript>();
+            if (trader && trader.hostile) return distance <= 12f && CanSeeThreat(b.transform.position, owner.transform.position, null);
             if (b.GetComponent<TurretScript>() || b.GetComponent<CeilingTurret>())
                 return distance <= 18f && CanSeeThreat(b.transform.position, owner.transform.position, null);
             return false;
@@ -336,7 +389,7 @@ namespace GuardianDrone
         BuildingEntity SelectTarget(Vector2 anchor)
         {
             seen.Clear(); BuildingEntity best = null; float bestDistance = 18f;
-            int count = Physics2D.OverlapCircleNonAlloc(anchor, 18f, Nearby, LayerMask.GetMask("Ground", "Body", "Limb"));
+            int count = Physics2D.OverlapCircleNonAlloc(anchor, 18f, Nearby, LayerMask.GetMask("Ground", "Body", "Limb", "Descriptor"));
             for (int i = 0; i < count; i++)
             {
                 var b = Nearby[i] ? Nearby[i].GetComponentInParent<BuildingEntity>() : null;
@@ -347,6 +400,26 @@ namespace GuardianDrone
                 { best = b; bestDistance = dist; }
             }
             return best;
+        }
+        bool FindScreenThreat(Vector2 anchor)
+        {
+            var camera = Camera.main;
+            float halfH = camera && camera.orthographic ? camera.orthographicSize + 1.5f : 10f;
+            float halfW = camera && camera.orthographic ? halfH * camera.aspect + 1.5f : 18f;
+            float radius = Mathf.Min(30f, Mathf.Sqrt(halfH * halfH + halfW * halfW) + 1.5f);
+            seen.Clear(); BuildingEntity found = null; float best = float.MaxValue;
+            int count = Physics2D.OverlapCircleNonAlloc(anchor, radius, Nearby, LayerMask.GetMask("Ground", "Body", "Limb", "Descriptor"));
+            for (int i = 0; i < count; i++)
+            {
+                var b = Nearby[i] ? Nearby[i].GetComponentInParent<BuildingEntity>() : null;
+                if (!b || !seen.Add(b.GetInstanceID()) || !IsEnemy(b)) continue;
+                if (!ScreenVisible(camera, b.transform.position, 1.5f)) continue;
+                if (!CanSeeThreat(Owner.transform.position, b.transform.position, b) &&
+                    !CanSeeThreat(transform.position, b.transform.position, b)) continue;
+                float dist = Vector2.Distance(anchor, b.transform.position);
+                if (dist < best) { best = dist; found = b; }
+            }
+            return found != null;
         }
         public static bool CanSeeThreat(Vector2 from, Vector2 to, BuildingEntity target)
         {
