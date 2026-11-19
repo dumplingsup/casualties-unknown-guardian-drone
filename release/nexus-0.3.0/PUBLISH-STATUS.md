@@ -8,7 +8,7 @@ Prepared 2026-11-19. **Nexus submission not performed.** The author updates the 
 - Uploaded asset: `GuardianDrone-0.3.0.zip`, 32 KB class.
 - Asset SHA-256: `05229b9246bc91c28def5bdb921ffb4a49f9bbd8acdfe2129fa3176bd474d9fd`.
 - DLL SHA-256: `042ff53765ce8ca9f2af8ad797945c707b784800e1d82ba4870d4d1cb2e83b6f`.
-- Source commit: to be filled after the 0.3.0 commit.
+- Source commit: `2e457ff65df60607cbc7ecc8657ceb1ad77da8c4`.
 
 ## Nexus handoff
 

@@ -9,7 +9,7 @@ SOURCE = ROOT / "artifacts/GuardianDrone-0.3.0.zip"
 ZIP_SHA = "05229b9246bc91c28def5bdb921ffb4a49f9bbd8acdfe2129fa3176bd474d9fd"
 DLL_SHA = "042ff53765ce8ca9f2af8ad797945c707b784800e1d82ba4870d4d1cb2e83b6f"
 DLL_NAME = "BepInEx/plugins/GuardianDrone/GuardianDrone.dll"
-SOURCE_COMMIT = "REPLACE_WITH_0.3.0_COMMIT"
+SOURCE_COMMIT = "2e457ff65df60607cbc7ecc8657ceb1ad77da8c4"
 
 
 def sha(data):
